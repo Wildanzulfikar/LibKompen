@@ -9,6 +9,7 @@ import (
 func SetupRoutes(app *fiber.App) {
 	app.Get("/users", controllers.UsersBebasPustakaGetAll)
 	app.Post("/users", controllers.CreateUsersBebasPustaka)
-
 	app.Delete("/users/:id_users", controllers.DeleteUsersBebasPustaka)
+
+	app.Post("/tenggat", controllers.CreateTenggat)
 }
