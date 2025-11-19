@@ -7,6 +7,10 @@ type TenggatWaktu struct {
 	IdUsers        uint      `json:"id_users"`
 	WaktuMulai     time.Time `json:"waktu_mulai"`
 	WaktuAkhir     time.Time `json:"waktu_akhir"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	CreatedAt      time.Time `gorm:"column:createdAt" json:"createdAt"`
+	UpdatedAt      time.Time `gorm:"column:updatedAt" json:"updatedAt"`
+}
+
+func (TenggatWaktu) TableName() string {
+	return "tenggat_waktu"
 }
