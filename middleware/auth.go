@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"LibKompen/database"
+	"LibKompen/models"
 	"os"
 	"strings"
-
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
 )
@@ -46,17 +48,38 @@ func Protected() fiber.Handler {
 			})
 		}
 
-		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			if uid, exists := claims["user_id"]; exists {
-				c.Locals("user_id", uid)
-			}
-			if uname, exists := claims["username"]; exists {
-				c.Locals("username", uname)
-			}
-			if role, exists := claims["role"]; exists {
-				c.Locals("role", role)
-			}
+		claims := token.Claims.(jwt.MapClaims)
+		var uid uint
+		switch v := claims["user_id"].(type) {
+		case float64:
+			uid = uint(v)
+		case int:
+			uid = uint(v)
+		case uint:
+			uid = v
+		case string:
+			var tmp int
+			fmt.Sscanf(v, "%d", &tmp)
+			uid = uint(tmp)
+		default:
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"success": false,
+				"message": "Claim user_id tidak valid",
+			})
 		}
+
+		var user models.UsersBebasPustaka
+		database.DB.First(&user, uid)
+
+		if user.IdUsers == 0 {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"success": false,
+				"message": "User tidak ditemukan",
+			})
+		}
+
+		c.Locals("user", user)
+		c.Locals("user_id", user.IdUsers)
 
 		return c.Next()
 	}
