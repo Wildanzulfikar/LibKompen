@@ -18,65 +18,31 @@ type AuthRequest struct {
 }
 
 type RegisterRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
+	Name            string `json:"name"`
+	Email           string `json:"email"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	ConfirmPassword string `json:"confirm"`
+	Role            string `json:"role"`
 }
 
 func Register(c *fiber.Ctx) error {
-	var body RegisterRequest
-	       if err := c.BodyParser(&body); err != nil {
-		       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Format request tidak valid",
-			       "error":   err.Error(),
-		       })
-	       }
+		       var body RegisterRequest
+		       if err := c.BodyParser(&body); err != nil {
+			       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				       "status": "error",
+				       "message": "Format request tidak valid",
+				       "error":   err.Error(),
+			       })
+		       }
+		       body.Role = services.SetDefaultRole(body.Role)
 
-	// Validasi username
-	       if len(body.Username) < 4 {
+	       if err := services.ValidateRegister(body.Username, body.Password, body.ConfirmPassword, body.Name, body.Email); err != nil {
 		       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			       "status": "error",
-			       "message": "Username minimal 4 karakter",
+			       "message": err.Error(),
 		       })
 	       }
-	       for _, ch := range body.Username {
-		       if !(ch >= 'a' && ch <= 'z') && !(ch >= 'A' && ch <= 'Z') && !(ch >= '0' && ch <= '9') {
-			       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				       "status": "error",
-				       "message": "Username hanya boleh huruf dan angka",
-			       })
-		       }
-	       }
-	// Validasi password
-	       if len(body.Password) < 6 {
-		       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Password minimal 6 karakter",
-		       })
-	       }
-	// Validasi nama
-	       if body.Name == "" {
-		       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Nama wajib diisi",
-		       })
-	       }
-	// Validasi email
-		       if body.Email == "" {
-			       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				       "status": "error",
-				       "message": "Email wajib diisi",
-			       })
-		       }
-		       if !isValidEmail(body.Email) {
-			       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				       "status": "error",
-				       "message": "Format email tidak valid",
-			       })
-		       }
        existing, err := services.FindUserByUsername(body.Username)
        if err == nil && existing != nil {
 	       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
