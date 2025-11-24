@@ -63,7 +63,7 @@ func UpdateTenggat(c *fiber.Ctx) error {
 func GetAllTenggat(c *fiber.Ctx) error {
 	var list []models.TenggatWaktu
 
-	if err := database.DB.Find(&list).Error; err != nil {
+	if err := database.DB.Preload("User").Find(&list).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -75,7 +75,7 @@ func GetAllTenggat(c *fiber.Ctx) error {
 func GetActiveTenggat(c *fiber.Ctx) error {
 	var activeTenggat models.TenggatWaktu
 
-	if err := database.DB.Order("id_tenggat_waktu DESC").First(&activeTenggat).Error; err != nil {
+	if err := database.DB.Preload("User").Order("id_tenggat_waktu DESC").First(&activeTenggat).Error; err != nil {
 		return c.Status(404).JSON(fiber.Map{
 			"error": "no tenggat found",
 		})
