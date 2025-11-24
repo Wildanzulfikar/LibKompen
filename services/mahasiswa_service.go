@@ -9,7 +9,7 @@ import (
 
 
 
-func GetMahasiswaBebasPustakaService(memberID string) ([]map[string]interface{}, error) {
+func GetMahasiswaBebasPustakaService(memberID string, jurusan string, statusPustaka string, statusPinjaman string, search string, tahun string) ([]map[string]interface{}, error) {
 	sikompenURL := "http://localhost:8000/api/mahasiswa?limit=0"
 	respMahasiswa, err := http.Get(sikompenURL)
 	if err != nil {
@@ -32,11 +32,60 @@ func GetMahasiswaBebasPustakaService(memberID string) ([]map[string]interface{},
 		   if memberID != "" && kodeUser != memberID {
 			   continue
 		   }
+		   if jurusan != "" && len(kodeUser) >= 4 && kodeUser[2:4] != jurusan {
+			   continue
+		   }
+
 		   namaUser, _ := m["nama_user"].(string)
 		   prodi, _ := m["prodi"].(string)
 		   kelas, _ := m["kelas"].(string)
 		   semester, _ := m["semester"].(string)
 		   idMahasiswa := m["id_mahasiswa"]
+
+		   if search != "" {
+			   if !(containsIgnoreCase(namaUser, search) || containsIgnoreCase(kodeUser, search)) {
+				   continue
+			   }
+		   }
+
+func containsIgnoreCase(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && (containsFold(s, substr))))
+}
+
+func containsFold(s, substr string) bool {
+	return len(substr) > 0 && (len(s) >= len(substr)) && (indexFold(s, substr) >= 0)
+}
+
+func indexFold(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if equalFold(s[i:i+len(substr)], substr) {
+			return i
+		}
+	}
+	return -1
+}
+
+func equalFold(s, t string) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		a, b := s[i], t[i]
+		if a == b {
+			continue
+		}
+		if 'A' <= a && a <= 'Z' {
+			a += 'a' - 'A'
+		}
+		if 'A' <= b && b <= 'Z' {
+			b += 'a' - 'A'
+		}
+		if a != b {
+			return false
+		}
+	}
+	return true
+}
 
 		   response := map[string]interface{}{
 			   "id_mahasiswa":    idMahasiswa,
@@ -53,6 +102,23 @@ func GetMahasiswaBebasPustakaService(memberID string) ([]map[string]interface{},
 		   loanURL := fmt.Sprintf("http://localhost:8080/loan?member_id=%s", kodeUser)
 		   loanResp, err := http.Get(loanURL)
 		   if err != nil {
+			   if tahun != "" {
+				   foundYear := false
+				   for _, loanItem := range loansData {
+					   loanMap, ok := loanItem.(map[string]interface{})
+					   if !ok {
+						   continue
+					   }
+					   returnDate, _ := loanMap["return_date"].(string)
+					   if len(returnDate) >= 4 && returnDate[:4] == tahun {
+						   foundYear = true
+						   break
+					   }
+				   }
+				   if !foundYear {
+					   continue
+				   }
+			   }
 			   hasil = append(hasil, response)
 			   continue
 		   }
@@ -102,6 +168,20 @@ func GetMahasiswaBebasPustakaService(memberID string) ([]map[string]interface{},
 						   }
 					   }
 				   }
+			   }
+		   }
+
+
+		   if statusPustaka != "" {
+			   statusVal, _ := response["status"].(string)
+			   if statusVal != statusPustaka {
+				   continue
+			   }
+		   }
+		   if statusPinjaman != "" {
+			   pinjamanVal, _ := response["status_pinjaman"].(string)
+			   if pinjamanVal != statusPinjaman {
+				   continue
 			   }
 		   }
 

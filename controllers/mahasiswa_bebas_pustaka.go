@@ -31,7 +31,12 @@ func authMiddleware(c *fiber.Ctx) error {
 
 func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
     filterMember := c.Query("member_id")
-    hasil, err := services.GetMahasiswaBebasPustakaService(filterMember)
+    jurusan := c.Query("jurusan")
+    statusPustaka := c.Query("status_pustaka")
+    statusPinjaman := c.Query("status_pinjaman")
+    search := c.Query("search")
+    tahun := c.Query("tahun")
+    hasil, err := services.GetMahasiswaBebasPustakaService(filterMember, jurusan, statusPustaka, statusPinjaman, search, tahun)
     if err != nil {
         return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
     }
