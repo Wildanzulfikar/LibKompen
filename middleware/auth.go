@@ -3,11 +3,11 @@ package middleware
 import (
 	"LibKompen/database"
 	"LibKompen/models"
-	"os"
-	"strings"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
+	"os"
+	"strings"
 )
 
 func Protected() fiber.Handler {

@@ -46,5 +46,3 @@ func FindApprovalByID(id uint) (*models.ApprovalBebasPustaka, error) {
 func DeleteApproval(approval *models.ApprovalBebasPustaka) error {
 	return database.DB.Delete(approval).Error
 }
-
-

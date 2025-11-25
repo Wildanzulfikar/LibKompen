@@ -14,14 +14,14 @@ func SetupRoutes(app *fiber.App) {
 
 	// Mahasiswa Bebas Pustaka
 	// Endpoint filter dan search via query parameter, contoh:
-	// ?jurusan=07             
-	// ?status_pustaka=Bebas%20Pustaka   
+	// ?jurusan=07
+	// ?status_pustaka=Bebas%20Pustaka
 	// ?status_pinjaman=Lunas
 	// ?tahun=2024
 	app.Get("/api/mahasiswa-bebas-pustaka/", middleware.Protected(), controllers.GetMahasiswaBebasPustaka)
 
 	// Loan
-	app.Get("/api/loan/", middleware.Protected(), controllers.GetAllLoan) // new endpoint for all loans
+	app.Get("/api/loan/", middleware.Protected(), controllers.GetAllLoan)
 	app.Get("/api/loan/:loan_id", middleware.Protected(), controllers.GetLoanDetail)
 	app.Delete("/api/loan/:loan_id", middleware.Protected(), controllers.DeleteLoanById)
 

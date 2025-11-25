@@ -2,7 +2,6 @@ package models
 
 import "time"
 
-
 type ApprovalBebasPustaka struct {
 	IDStatus       int       `gorm:"primaryKey;column:id_status" json:"id_status"`
 	KodeUser       string    `json:"kode_user"`
@@ -14,5 +13,5 @@ type ApprovalBebasPustaka struct {
 }
 
 func (ApprovalBebasPustaka) TableName() string {
-    return "status_approval"
+	return "status_approval"
 }

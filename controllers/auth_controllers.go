@@ -27,72 +27,72 @@ type RegisterRequest struct {
 }
 
 func Register(c *fiber.Ctx) error {
-		       var body RegisterRequest
-		       if err := c.BodyParser(&body); err != nil {
-			       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				       "status": "error",
-				       "message": "Format request tidak valid",
-				       "error":   err.Error(),
-			       })
-		       }
-		       body.Role = services.SetDefaultRole(body.Role)
+	var body RegisterRequest
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Format request tidak valid",
+			"error":   err.Error(),
+		})
+	}
+	body.Role = services.SetDefaultRole(body.Role)
 
-	       if err := services.ValidateRegister(body.Username, body.Password, body.ConfirmPassword, body.Name, body.Email); err != nil {
-		       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			       "status": "error",
-			       "message": err.Error(),
-		       })
-	       }
-       existing, err := services.FindUserByUsername(body.Username)
-       if err == nil && existing != nil {
-	       return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-		       "status": "error",
-		       "message": "Username sudah terdaftar, silakan gunakan username lain",
-	       })
-       }
+	if err := services.ValidateRegister(body.Username, body.Password, body.ConfirmPassword, body.Name, body.Email); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+	existing, err := services.FindUserByUsername(body.Username)
+	if err == nil && existing != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Username sudah terdaftar, silakan gunakan username lain",
+		})
+	}
 
-	       hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
-	       if err != nil {
-		       return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Gagal memproses password",
-			       "error":   err.Error(),
-		       })
-	       }
-	       hashedPassword := string(hashedPasswordBytes)
+	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal memproses password",
+			"error":   err.Error(),
+		})
+	}
+	hashedPassword := string(hashedPasswordBytes)
 
-	       user := models.UsersBebasPustaka{
-		       Name:      body.Name,
-		       Email:     body.Email,
-		       Username:  body.Username,
-		       Password:  string(hashedPassword),
-		       Role:      body.Role,
-		       Status:    true,
-		       CreatedAt: time.Now(),
-		       UpdatedAt: time.Now(),
-	       }
+	user := models.UsersBebasPustaka{
+		Name:      body.Name,
+		Email:     body.Email,
+		Username:  body.Username,
+		Password:  string(hashedPassword),
+		Role:      body.Role,
+		Status:    true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
 
-	       err = services.CreateUser(&user)
-	       if err != nil {
-		       return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Gagal membuat user baru",
-			       "error":   err.Error(),
-		       })
-	       }
+	err = services.CreateUser(&user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal membuat user baru",
+			"error":   err.Error(),
+		})
+	}
 
-		       return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			       "status": "success",
-			       "message": "Registrasi berhasil",
-			       "data": fiber.Map{
-				       "user_id":  user.IdUsers,
-				       "username": user.Username,
-				       "name":     user.Name,
-				       "email":    user.Email,
-				       "role":     user.Role,
-			       },
-		       })
-		}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Registrasi berhasil",
+		"data": fiber.Map{
+			"user_id":  user.IdUsers,
+			"username": user.Username,
+			"name":     user.Name,
+			"email":    user.Email,
+			"role":     user.Role,
+		},
+	})
+}
 
 func Login(c *fiber.Ctx) error {
 	var body AuthRequest
@@ -117,25 +117,25 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
-	       user, err := services.FindUserByUsername(body.Username)
-	       if err != nil || user == nil {
-		       return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Username atau password salah",
-		       })
-	       }
+	user, err := services.FindUserByUsername(body.Username)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Username atau password salah",
+		})
+	}
 
-	       err = services.CheckPassword(user.Password, body.Password)
-	       if err != nil {
-		       return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "Username atau password salah",
-		       })
-	       }
+	err = services.CheckPassword(user.Password, body.Password)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Username atau password salah",
+		})
+	}
 
-	       now := time.Now()
-	       user.LastLogin = &now
-		services.UpdateLastLogin(user) 
+	now := time.Now()
+	user.LastLogin = &now
+	services.UpdateLastLogin(user)
 
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -165,7 +165,7 @@ func Login(c *fiber.Ctx) error {
 		"data": fiber.Map{
 			"access_token": signed,
 			"token_type":   "Bearer",
-			"expires_in":   86400, 
+			"expires_in":   86400,
 			"user": fiber.Map{
 				"user_id":  user.IdUsers,
 				"username": user.Username,
@@ -186,20 +186,20 @@ func Me(c *fiber.Ctx) error {
 		})
 	}
 
-	       user, err := services.FindUserByID(id)
-	       if err != nil || user == nil {
-		       return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			       "status": "error",
-			       "message": "User tidak ditemukan",
-		       })
-	       }
+	user, err := services.FindUserByID(id)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  "error",
+			"message": "User tidak ditemukan",
+		})
+	}
 
-	       user.Password = ""
-	       return c.JSON(fiber.Map{
-		       "status": "success",
-		       "message": "Data user berhasil diambil",
-		       "data":    user,
-	       })
+	user.Password = ""
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Data user berhasil diambil",
+		"data":    user,
+	})
 }
 
 func Logout(c *fiber.Ctx) error {

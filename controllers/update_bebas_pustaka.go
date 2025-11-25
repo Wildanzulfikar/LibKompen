@@ -1,10 +1,10 @@
 package controllers
 
 import (
-    "github.com/gofiber/fiber/v2"
-    "LibKompen/services"
+	"LibKompen/services"
+	"github.com/gofiber/fiber/v2"
 )
 
 func UpdateBebasPustaka(c *fiber.Ctx) error {
-    return services.UpdateBebasPustakaService(c)
+	return services.UpdateBebasPustakaService(c)
 }

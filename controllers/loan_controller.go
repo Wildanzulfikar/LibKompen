@@ -1,10 +1,10 @@
-
 package controllers
 
 import (
-	"github.com/gofiber/fiber/v2"
 	"LibKompen/services"
+	"github.com/gofiber/fiber/v2"
 )
+
 func GetAllLoan(c *fiber.Ctx) error {
 	formatted, err := services.GetAllLoanFormatted()
 	if err != nil {
@@ -21,4 +21,3 @@ func GetLoanDetail(c *fiber.Ctx) error {
 	}
 	return c.JSON(result)
 }
-
