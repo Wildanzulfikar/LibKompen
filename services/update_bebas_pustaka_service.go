@@ -2,7 +2,6 @@ package services
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
     
 	"github.com/gofiber/fiber/v2"

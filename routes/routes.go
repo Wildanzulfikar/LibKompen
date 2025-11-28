@@ -21,7 +21,7 @@ func SetupRoutes(app *fiber.App) {
 	app.Get("/api/mahasiswa-bebas-pustaka/", middleware.Protected(), controllers.GetMahasiswaBebasPustaka)
 
 	// Loan
-	app.Get("/api/loan/", middleware.Protected(), controllers.GetAllLoan)
+	app.Get("/api/loan/", controllers.GetAllLoan)
 	app.Get("/api/loan/:loan_id", middleware.Protected(), controllers.GetLoanDetail)
 	app.Delete("/api/loan/:loan_id", middleware.Protected(), controllers.DeleteLoanById)
 
