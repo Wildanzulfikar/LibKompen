@@ -10,17 +10,43 @@ import (
 )
 
 func CreateTenggat(c *fiber.Ctx) error {
-	userId := c.Locals("id_users").(uint)
+	userIdInterface := c.Locals("id_users")
+	userId, ok := userIdInterface.(uint)
+	if !ok || userId == 0 {
+		return c.Status(401).JSON(fiber.Map{
+			"success": false,
+			"message": "User tidak terautentikasi",
+		})
+	}
+
 	var payload request.TenggatWaktuRequest
 
 	if err := c.BodyParser(&payload); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	start, err := time.Parse("2006-01-02", payload.WaktuMulai)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Format waktu_mulai tidak valid"})
+	}
+
+	end, err := time.Parse("2006-01-02", payload.WaktuAkhir)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Format waktu_akhir tidak valid"})
+	}
+
 	tenggat := models.TenggatWaktu{
 		IdUsers:    userId,
-		WaktuMulai: payload.WaktuMulai,
-		WaktuAkhir: payload.WaktuAkhir,
+		WaktuMulai: start,
+		WaktuAkhir: end,
+	}
+
+	var user models.UsersBebasPustaka
+	if err := database.DB.First(&user, userId).Error; err != nil {
+		return c.Status(401).JSON(fiber.Map{
+			"success": false,
+			"message": "User tidak ditemukan di database",
+		})
 	}
 
 	if err := database.DB.Create(&tenggat).Error; err != nil {
@@ -53,7 +79,7 @@ func UpdateTenggat(c *fiber.Ctx) error {
 	}
 
 	if payload.WaktuAkhir != nil {
-		tenggat.WaktuAkhir = *payload.WaktuMulai
+		tenggat.WaktuAkhir = *payload.WaktuAkhir
 	}
 
 	database.DB.Save(&tenggat)
@@ -63,7 +89,7 @@ func UpdateTenggat(c *fiber.Ctx) error {
 func GetAllTenggat(c *fiber.Ctx) error {
 	var list []models.TenggatWaktu
 
-	if err := database.DB.Find(&list).Error; err != nil {
+	if err := database.DB.Preload("User").Find(&list).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -75,7 +101,7 @@ func GetAllTenggat(c *fiber.Ctx) error {
 func GetActiveTenggat(c *fiber.Ctx) error {
 	var activeTenggat models.TenggatWaktu
 
-	if err := database.DB.Order("id_tenggat_waktu DESC").First(&activeTenggat).Error; err != nil {
+	if err := database.DB.Preload("User").Order("id_tenggat_waktu DESC").First(&activeTenggat).Error; err != nil {
 		return c.Status(404).JSON(fiber.Map{
 			"error": "no tenggat found",
 		})

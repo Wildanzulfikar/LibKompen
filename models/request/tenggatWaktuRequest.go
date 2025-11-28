@@ -1,9 +1,7 @@
 package request
 
-import "time"
-
 type TenggatWaktuRequest struct {
-	IdUsers    uint      `json:"id_users"`
-	WaktuMulai time.Time `json:"waktu_mulai"`
-	WaktuAkhir time.Time `json:"waktu_akhir"`
+	IdUsers    uint   `json:"id_users"`
+	WaktuMulai string `json:"waktu_mulai"`
+	WaktuAkhir string `json:"waktu_akhir"`
 }
