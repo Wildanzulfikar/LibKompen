@@ -32,7 +32,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 		if !ok {
 			continue
 		}
-		
+
 		var memberID string
 		switch v := loanMap["member_id"].(type) {
 		case string:
