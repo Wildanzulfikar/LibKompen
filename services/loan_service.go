@@ -32,7 +32,19 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 		if !ok {
 			continue
 		}
-		memberID, _ := loanMap["member_id"].(string)
+		
+		var memberID string
+		switch v := loanMap["member_id"].(type) {
+		case string:
+			memberID = v
+		case float64:
+			memberID = fmt.Sprintf("%.0f", v)
+		case int:
+			memberID = fmt.Sprintf("%d", v)
+		default:
+			memberID = ""
+		}
+
 		var mahasiswa map[string]interface{}
 		if memberID != "" {
 			sikompenURL := "http://localhost:8000/api/mahasiswa?nim=" + memberID
@@ -43,7 +55,14 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 				var mhsArr []map[string]interface{}
 				if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
 					for _, m := range mhsArr {
-						if m["kode_user"] == memberID {
+						var kodeUser string
+						switch kv := m["kode_user"].(type) {
+						case string:
+							kodeUser = kv
+						case float64:
+							kodeUser = fmt.Sprintf("%.0f", kv)
+						}
+						if kodeUser == memberID {
 							mahasiswa = m
 							break
 						}
@@ -86,13 +105,28 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 			}
 		}
 
+		var idMahasiswa interface{}
+		var kodeMahasiswa interface{}
+		var namaMahasiswa interface{}
+		var prodi interface{}
+		var kelas interface{}
+		var semester interface{}
+		if mahasiswa != nil {
+			idMahasiswa = mahasiswa["id_mahasiswa"]
+			kodeMahasiswa = mahasiswa["kode_user"]
+			namaMahasiswa = mahasiswa["nama_user"]
+			prodi = mahasiswa["prodi"]
+			kelas = mahasiswa["kelas"]
+			semester = mahasiswa["semester"]
+		}
+
 		formatted = append(formatted, map[string]interface{}{
-			"id_mahasiswa":  mahasiswa["id_mahasiswa"],
-			"nim":           mahasiswa["kode_user"],
-			"nama":          mahasiswa["nama_user"],
-			"prodi":         mahasiswa["prodi"],
-			"kelas":         mahasiswa["kelas"],
-			"semester":      mahasiswa["semester"],
+			"id_mahasiswa":  idMahasiswa,
+			"nim":           kodeMahasiswa,
+			"nama":          namaMahasiswa,
+			"prodi":         prodi,
+			"kelas":         kelas,
+			"semester":      semester,
 			"peminjaman":    loanMap["loan_date"],
 			"tenggat_waktu": loanMap["due_date"],
 			"pengembalian":  loanMap["return_date"],
@@ -129,7 +163,18 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 
 	// Data mahasiswa
 	var mahasiswaData map[string]interface{}
-	memberID, _ := loanResult["member_id"].(string)
+	// Normalize member_id which can be string or number
+	var memberID string
+	switch v := loanResult["member_id"].(type) {
+	case string:
+		memberID = v
+	case float64:
+		memberID = fmt.Sprintf("%.0f", v)
+	case int:
+		memberID = fmt.Sprintf("%d", v)
+	default:
+		memberID = ""
+	}
 	if memberID != "" {
 		sikompenURL := fmt.Sprintf("http://localhost:8000/api/mahasiswa?nim=%s", memberID)
 		respMhs, err := http.Get(sikompenURL)
@@ -138,7 +183,23 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 			mhsBytes, _ := io.ReadAll(respMhs.Body)
 			var mhsArr []map[string]interface{}
 			if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
-				mahasiswaData = mhsArr[0]
+				// Try to find exact kode_user match, similar to above
+				for _, m := range mhsArr {
+					var kodeUser string
+					switch kv := m["kode_user"].(type) {
+					case string:
+						kodeUser = kv
+					case float64:
+						kodeUser = fmt.Sprintf("%.0f", kv)
+					}
+					if kodeUser == memberID {
+						mahasiswaData = m
+						break
+					}
+				}
+				if mahasiswaData == nil {
+					mahasiswaData = mhsArr[0]
+				}
 			}
 		}
 	}

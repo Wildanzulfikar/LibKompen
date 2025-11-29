@@ -3,12 +3,8 @@ module LibKompen
 go 1.25.1
 
 require (
-<<<<<<< HEAD
-	github.com/gofiber/fiber/v2 v2.52.9
-	github.com/golang-jwt/jwt/v4 v4.5.2
-=======
 	github.com/gofiber/fiber/v2 v2.52.10
->>>>>>> 2d6b7057b390b77b8abda3276c346b5131c627ba
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.45.0
 	gorm.io/driver/mysql v1.6.0
