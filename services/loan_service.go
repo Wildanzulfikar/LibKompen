@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -62,7 +63,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 						case float64:
 							kodeUser = fmt.Sprintf("%.0f", kv)
 						}
-						if kodeUser == memberID {
+						if strings.TrimSpace(kodeUser) == strings.TrimSpace(memberID) {
 							mahasiswa = m
 							break
 						}
@@ -111,6 +112,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 		var prodi interface{}
 		var kelas interface{}
 		var semester interface{}
+
 		if mahasiswa != nil {
 			idMahasiswa = mahasiswa["id_mahasiswa"]
 			kodeMahasiswa = mahasiswa["kode_user"]
