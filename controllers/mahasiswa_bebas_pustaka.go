@@ -30,9 +30,18 @@ func authMiddleware(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+//	func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
+//		filterMember := c.Query("member_id")
+//		hasil, err := services.GetMahasiswaBebasPustakaService(filterMember)
+//		if err != nil {
+//			return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
+//		}
+//		return c.JSON(hasil)
+//	}
+
 func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
 	filterMember := c.Query("member_id")
-	hasil, err := services.GetMahasiswaBebasPustakaService(filterMember)
+	hasil, err := services.GetMahasiswaBebasPustakaServiceFast(filterMember) // service Fast
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}

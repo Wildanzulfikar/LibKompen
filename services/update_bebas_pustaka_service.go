@@ -4,7 +4,6 @@ import (
 	"LibKompen/database"
 	"LibKompen/models"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -34,75 +33,63 @@ func UpdateBebasPustakaService(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "kode_user wajib diisi"})
 	}
 
-	status, ok := body["status"].(string)
-	if !ok || (status != "bebas" && status != "tanggungan") {
-		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "status harus 'bebas' atau 'tanggungan'"})
-	}
-
 	keterangan, _ := body["keterangan"].(string)
-	statusVal := status == "bebas"
 
 	var count int64
 	database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Count(&count)
 	if count == 0 {
 		approval := models.ApprovalBebasPustaka{
-			KodeUser:       kodeUser,
-			StatusApproval: statusVal,
-			Keterangan:     keterangan,
-			IDUsers:        uint(userID),
+			KodeUser:   kodeUser,
+			Keterangan: keterangan,
+			IDUsers:    uint(userID),
 		}
 		database.DB.Create(&approval)
 	} else {
 		database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Updates(map[string]interface{}{
-			"status_approval": statusVal,
-			"keterangan":      keterangan,
-			"id_users":        uint(userID),
+			"keterangan": keterangan,
+			"id_users":   uint(userID),
 		})
 	}
 
-	if statusVal {
-		resp, err := http.Get("http://localhost:8080/loan?member_id=" + kodeUser)
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Gagal ambil loan dari OPAC"})
-		}
+	// Setelah update, cek status pinjaman real-time
+	resp, err := http.Get("http://localhost:8080/loan?member_id=" + kodeUser)
+	if err == nil {
 		defer resp.Body.Close()
-
 		var loanPayload map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&loanPayload); err != nil {
-			return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Gagal decode loan response"})
-		}
-
-		loansData, ok := loanPayload["data"].([]interface{})
-		if !ok {
-			return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Data loan tidak valid"})
-		}
-
-		for _, loanItem := range loansData {
-			loanMap, ok := loanItem.(map[string]interface{})
-			if !ok {
-				continue
+		if err := json.NewDecoder(resp.Body).Decode(&loanPayload); err == nil {
+			loansData, ok := loanPayload["data"].([]interface{})
+			if ok {
+				adaTanggungan := false
+				for _, loanItem := range loansData {
+					loanMap, ok := loanItem.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					isReturn, ok := loanMap["is_return"].(bool)
+					if !ok || !isReturn {
+						adaTanggungan = true
+						break
+					}
+				}
+				// Update status_approval dan keterangan di DB jika perlu
+				if adaTanggungan {
+					database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Updates(map[string]interface{}{
+						"status_approval": false,
+					})
+				} else {
+					database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Updates(map[string]interface{}{
+						"status_approval": true,
+						"keterangan":      "-",
+					})
+				}
 			}
-			isReturn, ok := loanMap["is_return"].(bool)
-			if !ok || isReturn {
-				continue
-			}
-			loanIdFloat, ok := loanMap["loan_id"].(float64)
-			if !ok {
-				continue
-			}
-			loanId := int(loanIdFloat)
-
-			url := fmt.Sprintf("http://localhost:8080/loan/%d/return", loanId)
-			req, _ := http.NewRequest("PUT", url, nil)
-			http.DefaultClient.Do(req)
 		}
 	}
 
 	return c.JSON(fiber.Map{
-		"status":       "success",
-		"message":      "Status bebas pustaka berhasil diperbarui",
-		"kode_user":    kodeUser,
-		"status_bebas": status,
-		"keterangan":   keterangan,
+		"status":     "success",
+		"message":    "Keterangan berhasil diperbarui. Status bebas pustaka akan otomatis mengikuti status pinjaman.",
+		"kode_user":  kodeUser,
+		"keterangan": keterangan,
 	})
 }

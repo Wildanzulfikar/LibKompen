@@ -28,6 +28,7 @@ func SetupRoutes(app *fiber.App) {
 
 	// Mahasiswa Bebas Pustaka
 	app.Get("/api/mahasiswa-bebas-pustaka/", controllers.GetMahasiswaBebasPustaka)
+	app.Get("/api/mahasiswa-bebas-pustaka/:member_id", controllers.GetMahasiswaBebasPustaka)
 
 	// Loan
 	app.Get("/api/loan/", controllers.GetAllLoan) // new endpoint for all loans

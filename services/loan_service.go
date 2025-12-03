@@ -9,22 +9,30 @@ import (
 	"time"
 )
 
-func GetAllLoanFormatted() ([]map[string]interface{}, error) {
-	resp, err := http.Get("http://localhost:8080/loan")
+func GetAllLoanFormatted(page, perPage int) ([]map[string]interface{}, int, error) {
+	url := fmt.Sprintf("http://localhost:8080/loan?page=%d&per_page=%d", page, perPage)
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("Gagal ambil data loan dari OPAC")
+		return nil, 0, fmt.Errorf("Gagal ambil data loan dari OPAC")
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, fmt.Errorf("Gagal decode data loan")
+		return nil, 0, fmt.Errorf("Gagal decode data loan")
 	}
 
 	loansData, ok := result["data"].([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("Data loan tidak valid")
+		return nil, 0, fmt.Errorf("Data loan tidak valid")
+	}
+
+	var total int
+	if meta, ok := result["meta"].(map[string]interface{}); ok {
+		if t, ok := meta["total"].(float64); ok {
+			total = int(t)
+		}
 	}
 
 	formatted := make([]map[string]interface{}, 0)
@@ -34,6 +42,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 			continue
 		}
 
+		// Ambil member_id
 		var memberID string
 		switch v := loanMap["member_id"].(type) {
 		case string:
@@ -46,6 +55,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 			memberID = ""
 		}
 
+		// Ambil data mahasiswa
 		var mahasiswa map[string]interface{}
 		if memberID != "" {
 			sikompenURL := "http://localhost:8000/api/mahasiswa?nim=" + memberID
@@ -72,6 +82,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 			}
 		}
 
+		// Status pinjaman
 		status := "Belum"
 		if val, ok := loanMap["is_return"].(bool); ok && val {
 			status = "Lunas"
@@ -79,40 +90,33 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 			status = "Lunas"
 		}
 
+		// Keterlambatan
 		keterlambatan := "-"
 		dueDate, _ := loanMap["due_date"].(string)
 		returnDate, _ := loanMap["return_date"].(string)
 		layout := "2006-01-02"
 		var daysLate int
 		if dueDate != "" {
+			var tDue, tReturn time.Time
+			var err1, err2 error
+			tDue, err1 = time.Parse(layout, dueDate)
 			if returnDate == "" {
-				now := fmt.Sprintf("%04d-%02d-%02d", time.Now().Year(), time.Now().Month(), time.Now().Day())
-				tDue, err1 := time.Parse(layout, dueDate)
-				tNow, err2 := time.Parse(layout, now)
-				if err1 == nil && err2 == nil {
-					daysLate = int(tNow.Sub(tDue).Hours() / 24)
-				}
+				tReturn = time.Now()
 			} else {
-				tDue, err1 := time.Parse(layout, dueDate)
-				tReturn, err2 := time.Parse(layout, returnDate)
-				if err1 == nil && err2 == nil {
-					daysLate = int(tReturn.Sub(tDue).Hours() / 24)
-				}
+				tReturn, err2 = time.Parse(layout, returnDate)
 			}
-			if daysLate > 0 {
-				keterlambatan = fmt.Sprintf("%d Hari", daysLate)
-			} else {
-				keterlambatan = "Tepat Waktu"
+			if err1 == nil && (returnDate == "" || err2 == nil) {
+				daysLate = int(tReturn.Sub(tDue).Hours() / 24)
+				if daysLate > 0 {
+					keterlambatan = fmt.Sprintf("%d Hari", daysLate)
+				} else {
+					keterlambatan = "Tepat Waktu"
+				}
 			}
 		}
 
-		var idMahasiswa interface{}
-		var kodeMahasiswa interface{}
-		var namaMahasiswa interface{}
-		var prodi interface{}
-		var kelas interface{}
-		var semester interface{}
-
+		// Data mahasiswa
+		var idMahasiswa, kodeMahasiswa, namaMahasiswa, prodi, kelas, semester interface{}
 		if mahasiswa != nil {
 			idMahasiswa = mahasiswa["id_mahasiswa"]
 			kodeMahasiswa = mahasiswa["kode_user"]
@@ -137,7 +141,7 @@ func GetAllLoanFormatted() ([]map[string]interface{}, error) {
 		})
 	}
 
-	return formatted, nil
+	return formatted, total, nil
 }
 
 func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
