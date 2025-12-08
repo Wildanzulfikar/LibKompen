@@ -82,12 +82,10 @@ func GetAllLoanFormatted(page, perPage int) ([]map[string]interface{}, int, erro
 			}
 		}
 
-		// Status pinjaman
+		// Status pinjaman langsung ambil dari field 'status' OPAC
 		status := "Belum"
-		if val, ok := loanMap["is_return"].(bool); ok && val {
-			status = "Lunas"
-		} else if val, ok := loanMap["is_return"].(float64); ok && val == 1 {
-			status = "Lunas"
+		if val, ok := loanMap["status"].(string); ok && val != "" {
+		    status = val
 		}
 
 		// Keterlambatan
@@ -189,7 +187,6 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 			mhsBytes, _ := io.ReadAll(respMhs.Body)
 			var mhsArr []map[string]interface{}
 			if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
-				// Try to find exact kode_user match, similar to above
 				for _, m := range mhsArr {
 					var kodeUser string
 					switch kv := m["kode_user"].(type) {
@@ -260,12 +257,10 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 		}
 	}
 	if loanResult != nil {
-		status := "Belum"
-		if val, ok := loanResult["is_return"].(bool); ok && val {
-			status = "Lunas"
-		} else if val, ok := loanResult["is_return"].(float64); ok && val == 1 {
-			status = "Lunas"
-		}
+			       status := "Belum"
+			       if val, ok := loanResult["status"].(string); ok && val != "" {
+				       status = val
+			       }
 		keterlambatan := "-"
 		dueDate, _ := loanResult["due_date"].(string)
 		returnDate, _ := loanResult["return_date"].(string)

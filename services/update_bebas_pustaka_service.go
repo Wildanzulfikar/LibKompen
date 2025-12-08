@@ -4,21 +4,36 @@ import (
 	"LibKompen/database"
 	"LibKompen/models"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func UpdateBebasPustakaService(c *fiber.Ctx) error {
-	uid := c.Locals("user_id")
+	var rawUID interface{}
+	if v := c.Locals("id_users"); v != nil {
+		rawUID = v
+	} else if v := c.Locals("user_id"); v != nil {
+		rawUID = v
+	} else if v := c.Locals("idUsers"); v != nil {
+		rawUID = v
+	} else if v := c.Locals("id"); v != nil {
+		rawUID = v
+	}
+
 	var userID uint
-	switch v := uid.(type) {
+	switch v := rawUID.(type) {
 	case uint:
 		userID = v
 	case int:
 		userID = uint(v)
 	case float64:
 		userID = uint(v)
+	case string:
+		var tmp int
+		fmt.Sscanf(v, "%d", &tmp)
+		userID = uint(tmp)
 	default:
 		return c.Status(401).JSON(fiber.Map{"status": "error", "message": "ID user tidak ditemukan di token"})
 	}
@@ -71,7 +86,7 @@ func UpdateBebasPustakaService(c *fiber.Ctx) error {
 						break
 					}
 				}
-				// Update status_approval dan keterangan di DB jika perlu
+				// Update status_approval dan keterangan di DB
 				if adaTanggungan {
 					database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Updates(map[string]interface{}{
 						"status_approval": false,

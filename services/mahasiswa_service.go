@@ -436,7 +436,7 @@ import (
 // 	return hasil, nil
 // }
 
-func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interface{}, error) {
+func GetMahasiswaBebasPustakaServiceFast(memberID string, jurusanKode string, statusPustaka string, statusPinjaman string) ([]map[string]interface{}, error) {
 	client := &http.Client{Timeout: 8 * time.Second}
 
 	// Ambil semua mahasiswa
@@ -456,76 +456,128 @@ func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interfac
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	for _, m := range mahasiswaList {
-		wg.Add(1)
-		go func(m map[string]interface{}) {
-			defer wg.Done()
+	   for _, m := range mahasiswaList {
+		   wg.Add(1)
+		   go func(m map[string]interface{}) {
+			   defer wg.Done()
 
-			kodeUser, ok := m["kode_user"].(string)
-			if !ok || (memberID != "" && kodeUser != memberID) {
-				return
-			}
+			   kodeUser, ok := m["kode_user"].(string)
+			   if !ok {
+				   return
+			   }
+			   // Filter by memberID jika ada
+			   if memberID != "" && kodeUser != memberID {
+				   return
+			   }
+			   // Filter by jurusanKode jika ada
+			   if jurusanKode != "" {
+				   if len(kodeUser) < 4 || kodeUser[2:4] != jurusanKode {
+					   return
+				   }
+			   }
 
-			response := map[string]interface{}{
-				"id_mahasiswa":    m["id_mahasiswa"],
-				"nim":             kodeUser,
-				"nama":            m["nama_user"],
-				"prodi":           m["prodi"],
-				"kelas":           m["kelas"],
-				"semester":        m["semester"],
-				"status":          "Bebas Pustaka",
-				"status_pinjaman": "Lunas",
-				"keterangan":      "-",
-			}
+			   response := map[string]interface{}{
+				   "id_mahasiswa":    m["id_mahasiswa"],
+				   "nim":             kodeUser,
+				   "nama":            m["nama_user"],
+				   "prodi":           m["prodi"],
+				   "kelas":           m["kelas"],
+				   "semester":        m["semester"],
+				   "status":          "Bebas Pustaka",
+				   "status_pinjaman": "Lunas",
+				   "keterangan":      "-",
+			   }
 
-			// Ambil loan
-			loanURL := fmt.Sprintf("http://localhost:8080/loan?member_id=%s", kodeUser)
-			loanResp, err := client.Get(loanURL)
-			var loansData []map[string]interface{}
-			if err == nil {
-				defer loanResp.Body.Close()
-				var loanWrapper struct {
-					Data []map[string]interface{} `json:"data"`
-				}
-				if err := json.NewDecoder(loanResp.Body).Decode(&loanWrapper); err == nil {
-					loansData = loanWrapper.Data
-				}
-			}
+			   // Ambil loan
+			   loanURL := fmt.Sprintf("http://localhost:8080/loan?member_id=%s", kodeUser)
+			   loanResp, err := client.Get(loanURL)
+			   var loansData []map[string]interface{}
+			   if err == nil {
+				   defer loanResp.Body.Close()
+				   var loanWrapper struct {
+					   Data []map[string]interface{} `json:"data"`
+				   }
+				   if err := json.NewDecoder(loanResp.Body).Decode(&loanWrapper); err == nil {
+					   loansData = loanWrapper.Data
+				   }
+			   }
 
-			// Cek tanggungan
-			adaTanggungan := false
-			for _, loanMap := range loansData {
-				if isReturn, ok := loanMap["is_return"].(bool); ok && !isReturn {
-					adaTanggungan = true
-					break
-				}
-			}
+			   // Cek tanggungan 
+			   adaTanggungan := false
+			   for _, loanMap := range loansData {
+				   var isReturnBool bool
+				   if isReturnRaw, ok := loanMap["is_return"]; ok && isReturnRaw != nil {
+					   switch v := isReturnRaw.(type) {
+					   case bool:
+						   isReturnBool = v
+					   case int:
+						   isReturnBool = v != 0
+					   case int8:
+						   isReturnBool = v != 0
+					   case int16:
+						   isReturnBool = v != 0
+					   case int32:
+						   isReturnBool = v != 0
+					   case int64:
+						   isReturnBool = v != 0
+					   case float32:
+						   isReturnBool = v != 0
+					   case float64:
+						   isReturnBool = v != 0
+					   case string:
+						   isReturnBool = v == "1" || v == "true"
+					   }
+				   }
+				   if !isReturnBool {
+					   adaTanggungan = true
+					   break
+				   }
+			   }
 
-			if adaTanggungan {
-				response["status"] = "Tanggungan"
-				response["status_pinjaman"] = "Belum"
+			   if adaTanggungan {
+				   response["status"] = "Tanggungan"
+				   response["status_pinjaman"] = "Belum"
 
-				// Ambil status approval
-				statusURL := fmt.Sprintf("http://localhost:8000/api/status_approval?kode_user=%s", kodeUser)
-				statusResp, err := client.Get(statusURL)
-				if err == nil {
-					defer statusResp.Body.Close()
-					var statApproval []map[string]interface{}
-					if err := json.NewDecoder(statusResp.Body).Decode(&statApproval); err == nil {
-						if len(statApproval) > 0 {
-							if keterangan, ok := statApproval[0]["keterangan"].(string); ok {
-								response["keterangan"] = keterangan
-							}
-						}
-					}
-				}
-			}
+				   // Ambil status approval
+				   statusURL := fmt.Sprintf("http://localhost:8000/api/status_approval?kode_user=%s", kodeUser)
+				   statusResp, err := client.Get(statusURL)
+				   if err == nil {
+					   defer statusResp.Body.Close()
+					   var statApproval []map[string]interface{}
+					   if err := json.NewDecoder(statusResp.Body).Decode(&statApproval); err == nil {
+						   if len(statApproval) > 0 {
+							   if keterangan, ok := statApproval[0]["keterangan"].(string); ok {
+								   response["keterangan"] = keterangan
+							   }
+						   }
+					   }
+				   }
+			   }
 
-			mu.Lock()
-			hasil = append(hasil, response)
-			mu.Unlock()
-		}(m)
-	}
+			   // Filter by statusPustaka 
+			   if statusPustaka != "" {
+				   if statusPustaka == "Bebas Pustaka" && response["status"] != "Bebas Pustaka" {
+					   return
+				   }
+				   if statusPustaka == "Tanggungan" && response["status"] != "Tanggungan" {
+					   return
+				   }
+			   }
+			   // Filter by statusPinjaman
+			   if statusPinjaman != "" {
+				   if statusPinjaman == "Lunas" && response["status_pinjaman"] != "Lunas" {
+					   return
+				   }
+				   if statusPinjaman == "Belum" && response["status_pinjaman"] != "Belum" {
+					   return
+				   }
+			   }
+
+			   mu.Lock()
+			   hasil = append(hasil, response)
+			   mu.Unlock()
+		   }(m)
+	   }
 
 	wg.Wait()
 	return hasil, nil
