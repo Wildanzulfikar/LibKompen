@@ -8,27 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v4"
 )
-
-func authMiddleware(c *fiber.Ctx) error {
-	tokenString := c.Get("Authorization")
-	if tokenString == "" {
-		return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Token tidak ditemukan"})
-	}
-
-	if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
-		tokenString = tokenString[7:]
-	}
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte("your-secret-key"), nil
-	})
-	if err != nil || !token.Valid {
-		return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Token tidak valid"})
-	}
-	return c.Next()
-}
 
 //	func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
 //		filterMember := c.Query("member_id")
@@ -40,7 +20,7 @@ func authMiddleware(c *fiber.Ctx) error {
 //	}
 
 func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
-	filterMember := c.Query("member_id")
+	filterMember := c.Params("member_id")
 	hasil, err := services.GetMahasiswaBebasPustakaServiceFast(filterMember) // service Fast
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})

@@ -24,7 +24,7 @@ func SetupRoutes(app *fiber.App) {
 	tenggat.Put("/:id_tenggat_waktu", controllers.UpdateTenggat)
 	// Bebas Pustaka
 	app.Get("/api/bebas-pustaka/:kode_user/history", middleware.Protected(), controllers.GetBebasPustakaHistory)
-	app.Post("/api/bebas-pustaka/update", middleware.Protected(), controllers.UpdateBebasPustaka)
+	app.Put("/api/bebas-pustaka/update", middleware.Protected(), controllers.UpdateBebasPustaka)
 
 	// Mahasiswa Bebas Pustaka
 	app.Get("/api/mahasiswa-bebas-pustaka/", controllers.GetMahasiswaBebasPustaka)

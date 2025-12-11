@@ -84,10 +84,8 @@ func GetAllLoanFormatted(page, perPage int) ([]map[string]interface{}, int, erro
 
 		// Status pinjaman
 		status := "Belum"
-		if val, ok := loanMap["is_return"].(bool); ok && val {
-			status = "Lunas"
-		} else if val, ok := loanMap["is_return"].(float64); ok && val == 1 {
-			status = "Lunas"
+		if val, ok := loanMap["status"].(string); ok && val != "" {
+			status = val
 		}
 
 		// Keterlambatan

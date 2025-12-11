@@ -1,6 +1,8 @@
 package services
 
 import (
+	"LibKompen/database"
+	"LibKompen/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -432,9 +434,9 @@ import (
 // 		}(m)
 // 	}
 
-// 	wg.Wait()
-// 	return hasil, nil
-// }
+//		wg.Wait()
+//		return hasil, nil
+//	}
 
 func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interface{}, error) {
 	client := &http.Client{Timeout: 8 * time.Second}
@@ -495,7 +497,30 @@ func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interfac
 			// Cek tanggungan
 			adaTanggungan := false
 			for _, loanMap := range loansData {
-				if isReturn, ok := loanMap["is_return"].(bool); ok && !isReturn {
+				var isReturnBool bool
+				if isReturnRaw, ok := loanMap["is_return"]; ok && isReturnRaw != nil {
+					switch v := isReturnRaw.(type) {
+					case bool:
+						isReturnBool = v
+					case int:
+						isReturnBool = v != 0
+					case int8:
+						isReturnBool = v != 0
+					case int16:
+						isReturnBool = v != 0
+					case int32:
+						isReturnBool = v != 0
+					case int64:
+						isReturnBool = v != 0
+					case float32:
+						isReturnBool = v != 0
+					case float64:
+						isReturnBool = v != 0
+					case string:
+						isReturnBool = v == "1" || v == "true"
+					}
+				}
+				if !isReturnBool {
 					adaTanggungan = true
 					break
 				}
@@ -505,19 +530,10 @@ func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interfac
 				response["status"] = "Tanggungan"
 				response["status_pinjaman"] = "Belum"
 
-				// Ambil status approval
-				statusURL := fmt.Sprintf("http://localhost:8000/api/status_approval?kode_user=%s", kodeUser)
-				statusResp, err := client.Get(statusURL)
-				if err == nil {
-					defer statusResp.Body.Close()
-					var statApproval []map[string]interface{}
-					if err := json.NewDecoder(statusResp.Body).Decode(&statApproval); err == nil {
-						if len(statApproval) > 0 {
-							if keterangan, ok := statApproval[0]["keterangan"].(string); ok {
-								response["keterangan"] = keterangan
-							}
-						}
-					}
+				// Ambil keterangan langsung dari DB
+				var approval models.ApprovalBebasPustaka
+				if err := database.DB.Where("kode_user = ?", kodeUser).First(&approval).Error; err == nil {
+					response["keterangan"] = approval.Keterangan
 				}
 			}
 

@@ -216,20 +216,3 @@ func Logout(c *fiber.Ctx) error {
 		"message": "Logout berhasil",
 	})
 }
-
-func isValidEmail(email string) bool {
-	if len(email) < 6 || len(email) > 50 {
-		return false
-	}
-	at := false
-	dot := false
-	for i, c := range email {
-		if c == '@' && i > 0 {
-			at = true
-		}
-		if c == '.' && at {
-			dot = true
-		}
-	}
-	return at && dot
-}
