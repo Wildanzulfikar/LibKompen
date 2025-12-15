@@ -1,13 +1,14 @@
 package services
 
 import (
-	"LibKompen/database"
-	"LibKompen/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+
+	"LibKompen/database"
+	"LibKompen/models"
 )
 
 func UpdateBebasPustakaService(c *fiber.Ctx) error {
@@ -43,9 +44,9 @@ func UpdateBebasPustakaService(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Body request tidak valid"})
 	}
 
-	kodeUser, ok := body["kode_user"].(string)
-	if !ok || kodeUser == "" {
-		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "kode_user wajib diisi"})
+	kodeUser := c.Params("kode_user")
+	if kodeUser == "" {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "kode_user wajib diisi di URL"})
 	}
 
 	keterangan, _ := body["keterangan"].(string)
@@ -86,7 +87,7 @@ func UpdateBebasPustakaService(c *fiber.Ctx) error {
 						break
 					}
 				}
-				// Update status_approval dan keterangan di DB
+				// Update status_approval dan keterangan di DB jika perlu
 				if adaTanggungan {
 					database.DB.Table("status_approval").Where("kode_user = ?", kodeUser).Updates(map[string]interface{}{
 						"status_approval": false,
