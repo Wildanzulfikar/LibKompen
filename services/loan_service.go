@@ -5,137 +5,156 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
+	"golang.org/x/sync/singleflight"
 )
 
-func GetAllLoanFormatted(page, perPage int) ([]map[string]interface{}, int, error) {
-	url := fmt.Sprintf("http://localhost:8080/loan?page=%d&per_page=%d", page, perPage)
-	resp, err := http.Get(url)
+var mhsFetchGroup singleflight.Group
+
+var mahasiswaCache = struct {
+	sync.RWMutex
+	data      map[string]map[string]interface{}
+	lastFetch time.Time
+}{
+	data: make(map[string]map[string]interface{}),
+}
+
+func getMahasiswaCache() map[string]map[string]interface{} {
+	mahasiswaCache.RLock()
+	if time.Since(mahasiswaCache.lastFetch) < 10*time.Minute && len(mahasiswaCache.data) > 0 {
+		defer mahasiswaCache.RUnlock()
+		return mahasiswaCache.data
+	}
+	mahasiswaCache.RUnlock()
+
+	// 🔥 SINGLEFLIGHT: hanya 1 fetch jalan
+	_, _, _ = mhsFetchGroup.Do("fetch-mahasiswa", func() (interface{}, error) {
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get("http://localhost:8000/api/mahasiswa")
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		var arr []map[string]interface{}
+		if err := json.Unmarshal(body, &arr); err != nil {
+			return nil, err
+		}
+
+		cache := make(map[string]map[string]interface{})
+		for _, m := range arr {
+			if v, ok := m["kode_user"]; ok {
+				k := strings.TrimSpace(fmt.Sprintf("%v", v))
+				if k != "" {
+					cache[k] = m
+				}
+			}
+			if v, ok := m["id_mahasiswa"]; ok {
+				k := strings.TrimSpace(fmt.Sprintf("%v", v))
+				if k != "" {
+					cache[k] = m
+				}
+			}
+		}
+
+		mahasiswaCache.Lock()
+		mahasiswaCache.data = cache
+		mahasiswaCache.lastFetch = time.Now()
+		mahasiswaCache.Unlock()
+
+		return nil, nil
+	})
+
+	mahasiswaCache.RLock()
+	defer mahasiswaCache.RUnlock()
+	return mahasiswaCache.data
+}
+
+func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interface{}, int, error) {
+	url := fmt.Sprintf("http://localhost:8080/loan?page=%d&per_page=%d&search=%s", page, perPage, url.QueryEscape(search))
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Gagal ambil data loan dari OPAC")
+		return nil, 0, fmt.Errorf("gagal ambil data loan")
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
+
 	var result map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, 0, fmt.Errorf("Gagal decode data loan")
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, 0, fmt.Errorf("decode gagal")
 	}
 
-	loansData, ok := result["data"].([]interface{})
-	if !ok {
-		return nil, 0, fmt.Errorf("Data loan tidak valid")
-	}
+	loansData := result["data"].([]interface{})
+	meta := result["meta"].(map[string]interface{})
+	total := int(meta["total"].(float64))
 
-	var total int
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
-		if t, ok := meta["total"].(float64); ok {
-			total = int(t)
-		}
-	}
+	// 🔥 ambil cache mahasiswa SEKALI
+	mahasiswaMap := getMahasiswaCache()
 
+	layout := "2006-01-02"
 	formatted := make([]map[string]interface{}, 0)
-	for _, loanItem := range loansData {
-		loanMap, ok := loanItem.(map[string]interface{})
-		if !ok {
-			continue
+
+	for _, item := range loansData {
+		loan := item.(map[string]interface{})
+
+		memberID := strings.TrimSpace(fmt.Sprintf("%v", loan["member_id"]))
+		mahasiswa := mahasiswaMap[memberID]
+
+		if mahasiswa == nil {
+			fmt.Println("TIDAK MATCH:", memberID)
+		} else {
+			fmt.Println("MATCH:", memberID, mahasiswa["nama_user"])
 		}
 
-		// Ambil member_id
-		var memberID string
-		switch v := loanMap["member_id"].(type) {
-		case string:
-			memberID = v
-		case float64:
-			memberID = fmt.Sprintf("%.0f", v)
-		case int:
-			memberID = fmt.Sprintf("%d", v)
-		default:
-			memberID = ""
-		}
-
-		// Ambil data mahasiswa
-		var mahasiswa map[string]interface{}
-		if memberID != "" {
-			sikompenURL := "http://localhost:8000/api/mahasiswa?nim=" + memberID
-			respMhs, err := http.Get(sikompenURL)
-			if err == nil {
-				defer respMhs.Body.Close()
-				mhsBytes, _ := io.ReadAll(respMhs.Body)
-				var mhsArr []map[string]interface{}
-				if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
-					for _, m := range mhsArr {
-						var kodeUser string
-						switch kv := m["kode_user"].(type) {
-						case string:
-							kodeUser = kv
-						case float64:
-							kodeUser = fmt.Sprintf("%.0f", kv)
-						}
-						if strings.TrimSpace(kodeUser) == strings.TrimSpace(memberID) {
-							mahasiswa = m
-							break
-						}
-					}
-				}
-			}
-		}
-
-		// Status pinjaman
-		status := "Belum"
-		if val, ok := loanMap["status"].(string); ok && val != "" {
-			status = val
-		}
-
-		// Keterlambatan
+		// keterlambatan
 		keterlambatan := "-"
-		dueDate, _ := loanMap["due_date"].(string)
-		returnDate, _ := loanMap["return_date"].(string)
-		layout := "2006-01-02"
-		var daysLate int
+		dueDate, _ := loan["due_date"].(string)
+		returnDate, _ := loan["return_date"].(string)
+
 		if dueDate != "" {
-			var tDue, tReturn time.Time
-			var err1, err2 error
-			tDue, err1 = time.Parse(layout, dueDate)
-			if returnDate == "" {
-				tReturn = time.Now()
-			} else {
-				tReturn, err2 = time.Parse(layout, returnDate)
+			tDue, _ := time.Parse(layout, dueDate)
+			tReturn := time.Now()
+			if returnDate != "" {
+				tReturn, _ = time.Parse(layout, returnDate)
 			}
-			if err1 == nil && (returnDate == "" || err2 == nil) {
-				daysLate = int(tReturn.Sub(tDue).Hours() / 24)
-				if daysLate > 0 {
-					keterlambatan = fmt.Sprintf("%d Hari", daysLate)
-				} else {
-					keterlambatan = "Tepat Waktu"
-				}
+			days := int(tReturn.Sub(tDue).Hours() / 24)
+			if days > 0 {
+				keterlambatan = fmt.Sprintf("%d Hari", days)
+			} else {
+				keterlambatan = "Tepat Waktu"
 			}
 		}
 
-		// Data mahasiswa
-		var idMahasiswa, kodeMahasiswa, namaMahasiswa, prodi, kelas, semester interface{}
+		var idMhs, nim, nama, prodi, kelas, semester interface{}
 		if mahasiswa != nil {
-			idMahasiswa = mahasiswa["id_mahasiswa"]
-			kodeMahasiswa = mahasiswa["kode_user"]
-			namaMahasiswa = mahasiswa["nama_user"]
+			idMhs = mahasiswa["id_mahasiswa"]
+			nim = mahasiswa["kode_user"]
+			nama = mahasiswa["nama_user"]
 			prodi = mahasiswa["prodi"]
 			kelas = mahasiswa["kelas"]
 			semester = mahasiswa["semester"]
 		}
 
 		formatted = append(formatted, map[string]interface{}{
-			"id_mahasiswa":  idMahasiswa,
-			"nim":           kodeMahasiswa,
-			"nama":          namaMahasiswa,
+			"id_mahasiswa":  idMhs,
+			"nim":           nim,
+			"nama":          nama,
 			"prodi":         prodi,
 			"kelas":         kelas,
 			"semester":      semester,
-			"peminjaman":    loanMap["loan_date"],
-			"tenggat_waktu": loanMap["due_date"],
-			"pengembalian":  loanMap["return_date"],
+			"peminjaman":    loan["loan_date"],
+			"tenggat_waktu": loan["due_date"],
+			"pengembalian":  loan["return_date"],
 			"keterlambatan": keterlambatan,
-			"status":        status,
+			"status":        loan["status"],
 		})
 	}
 

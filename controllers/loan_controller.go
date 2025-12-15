@@ -9,8 +9,9 @@ import (
 func GetAllLoan(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 10)
+	search := c.Query("search", "")
 
-	formatted, total, err := services.GetAllLoanFormatted(page, perPage)
+	formatted, total, err := services.GetAllLoanFormatted(page, perPage, search)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
