@@ -30,7 +30,6 @@ func getMahasiswaCache() map[string]map[string]interface{} {
 	}
 	mahasiswaCache.RUnlock()
 
-	// 🔥 SINGLEFLIGHT: hanya 1 fetch jalan
 	_, _, _ = mhsFetchGroup.Do("fetch-mahasiswa", func() (interface{}, error) {
 
 		client := &http.Client{Timeout: 5 * time.Second}
@@ -96,7 +95,6 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 	meta := result["meta"].(map[string]interface{})
 	total := int(meta["total"].(float64))
 
-	// 🔥 ambil cache mahasiswa SEKALI
 	mahasiswaMap := getMahasiswaCache()
 
 	layout := "2006-01-02"
@@ -186,7 +184,6 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 
 	// Data mahasiswa
 	var mahasiswaData map[string]interface{}
-	// Normalize member_id which can be string or number
 	var memberID string
 	switch v := loanResult["member_id"].(type) {
 	case string:
