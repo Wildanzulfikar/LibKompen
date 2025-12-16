@@ -32,7 +32,7 @@ func SetupRoutes(app *fiber.App) {
 
 	// Loan
 	app.Get("/api/loan/", controllers.GetAllLoan) // new endpoint for all loans
-	app.Get("/api/loan/:loan_id", middleware.Protected(), controllers.GetLoanDetail)
+	app.Get("/api/loan/:loan_id", controllers.GetLoanDetail)
 	app.Delete("/api/loan/:loan_id", middleware.Protected(), controllers.DeleteLoanById)
 
 	// Users
@@ -46,8 +46,8 @@ func SetupRoutes(app *fiber.App) {
 	app.Get("/api/me", middleware.Protected(), controllers.Me)
 
 	// Biblio & Approvals
-	// app.Get("/api/biblio", controllers.GetBiblio)
-	// app.Post("/api/biblio", controllers.CreateBiblio)
+	app.Get("/api/biblio", controllers.GetBiblio)
+	app.Post("/api/biblio", controllers.CreateBiblio)
 	// app.Get("/api/approvals", controllers.GetApprovals)
 	// app.Post("/api/approvals", controllers.CreateApproval)
 
