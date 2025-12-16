@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
+
 	"golang.org/x/sync/singleflight"
 )
 
@@ -30,8 +30,8 @@ func getMahasiswaCache() map[string]map[string]interface{} {
 	}
 	mahasiswaCache.RUnlock()
 
+	// SINGLEFLIGHT
 	_, _, _ = mhsFetchGroup.Do("fetch-mahasiswa", func() (interface{}, error) {
-
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Get("http://localhost:8000/api/mahasiswa")
 		if err != nil {
@@ -56,7 +56,9 @@ func getMahasiswaCache() map[string]map[string]interface{} {
 			if v, ok := m["id_mahasiswa"]; ok {
 				k := strings.TrimSpace(fmt.Sprintf("%v", v))
 				if k != "" {
-					cache[k] = m
+					if _, exists := cache[k]; !exists {
+						cache[k] = m
+					}
 				}
 			}
 		}
@@ -74,49 +76,87 @@ func getMahasiswaCache() map[string]map[string]interface{} {
 	return mahasiswaCache.data
 }
 
-func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interface{}, int, error) {
-	url := fmt.Sprintf("http://localhost:8080/loan?page=%d&per_page=%d&search=%s", page, perPage, url.QueryEscape(search))
+var allLoansCache = struct {
+	sync.RWMutex
+	data      []map[string]interface{}
+	lastFetch time.Time
+}{}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, 0, fmt.Errorf("gagal ambil data loan")
+func fetchAllLoans() ([]map[string]interface{}, error) {
+	allLoansCache.RLock()
+	if time.Since(allLoansCache.lastFetch) < 10*time.Minute && len(allLoansCache.data) > 0 {
+		defer allLoansCache.RUnlock()
+		return allLoansCache.data, nil
 	}
-	defer resp.Body.Close()
+	allLoansCache.RUnlock()
 
-	body, _ := io.ReadAll(resp.Body)
+	client := &http.Client{Timeout: 10 * time.Second}
+	allLoans := make([]map[string]interface{}, 0)
+	currentPage := 1
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, 0, fmt.Errorf("decode gagal")
-	}
+	for {
+		urlStr := fmt.Sprintf("http://localhost:8080/loan?page=%d&per_page=1000", currentPage)
+		resp, err := client.Get(urlStr)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 
-	loansData := result["data"].([]interface{})
-	meta := result["meta"].(map[string]interface{})
-	total := int(meta["total"].(float64))
-
-	mahasiswaMap := getMahasiswaCache()
-
-	layout := "2006-01-02"
-	formatted := make([]map[string]interface{}, 0)
-
-	for _, item := range loansData {
-		loan := item.(map[string]interface{})
-
-		memberID := strings.TrimSpace(fmt.Sprintf("%v", loan["member_id"]))
-		mahasiswa := mahasiswaMap[memberID]
-
-		if mahasiswa == nil {
-			fmt.Println("TIDAK MATCH:", memberID)
-		} else {
-			fmt.Println("MATCH:", memberID, mahasiswa["nama_user"])
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
 		}
 
-		// keterlambatan
+		loansData, ok := result["data"].([]interface{})
+		if !ok || len(loansData) == 0 {
+			break
+		}
+
+		for _, item := range loansData {
+			allLoans = append(allLoans, item.(map[string]interface{}))
+		}
+
+		meta := result["meta"].(map[string]interface{})
+		total := int(meta["total"].(float64))
+		if currentPage*1000 >= total {
+			break
+		}
+		currentPage++
+	}
+
+	allLoansCache.Lock()
+	allLoansCache.data = allLoans
+	allLoansCache.lastFetch = time.Now()
+	allLoansCache.Unlock()
+
+	return allLoans, nil
+}
+
+func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interface{}, int, error) {
+	// Ambil semua loan dari cache / fetch baru
+	allLoans, err := fetchAllLoans()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Ambil master mahasiswa
+	mahasiswaMap := getMahasiswaCache()
+	layout := "2006-01-02"
+
+	// Filter loan sesuai mahasiswa
+	filtered := make([]map[string]interface{}, 0)
+	for _, loan := range allLoans {
+		memberID := strings.TrimSpace(fmt.Sprintf("%v", loan["member_id"]))
+		mahasiswa := mahasiswaMap[memberID]
+		if mahasiswa == nil {
+			continue
+		}
+
+		// hitung keterlambatan
 		keterlambatan := "-"
 		dueDate, _ := loan["due_date"].(string)
 		returnDate, _ := loan["return_date"].(string)
-
 		if dueDate != "" {
 			tDue, _ := time.Parse(layout, dueDate)
 			tReturn := time.Now()
@@ -131,23 +171,13 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 			}
 		}
 
-		var idMhs, nim, nama, prodi, kelas, semester interface{}
-		if mahasiswa != nil {
-			idMhs = mahasiswa["id_mahasiswa"]
-			nim = mahasiswa["kode_user"]
-			nama = mahasiswa["nama_user"]
-			prodi = mahasiswa["prodi"]
-			kelas = mahasiswa["kelas"]
-			semester = mahasiswa["semester"]
-		}
-
-		formatted = append(formatted, map[string]interface{}{
-			"id_mahasiswa":  idMhs,
-			"nim":           nim,
-			"nama":          nama,
-			"prodi":         prodi,
-			"kelas":         kelas,
-			"semester":      semester,
+		filtered = append(filtered, map[string]interface{}{
+			"id_mahasiswa":  mahasiswa["id_mahasiswa"],
+			"nim":           mahasiswa["kode_user"],
+			"nama":          mahasiswa["nama_user"],
+			"prodi":         mahasiswa["prodi"],
+			"kelas":         mahasiswa["kelas"],
+			"semester":      mahasiswa["semester"],
 			"peminjaman":    loan["loan_date"],
 			"tenggat_waktu": loan["due_date"],
 			"pengembalian":  loan["return_date"],
@@ -156,7 +186,19 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 		})
 	}
 
-	return formatted, total, nil
+	// Pagination dari filtered
+	total := len(filtered)
+	start := (page - 1) * perPage
+	end := start + perPage
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	paginated := filtered[start:end]
+
+	return paginated, total, nil
 }
 
 func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
@@ -184,6 +226,7 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 
 	// Data mahasiswa
 	var mahasiswaData map[string]interface{}
+	// Normalize member_id which can be string or number
 	var memberID string
 	switch v := loanResult["member_id"].(type) {
 	case string:
