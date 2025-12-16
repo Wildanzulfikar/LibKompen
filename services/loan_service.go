@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"golang.org/x/sync/singleflight"
 )
 
@@ -30,6 +31,7 @@ func getMahasiswaCache() map[string]map[string]interface{} {
 	}
 	mahasiswaCache.RUnlock()
 
+	// 🔥 SINGLEFLIGHT: hanya 1 fetch jalan
 	_, _, _ = mhsFetchGroup.Do("fetch-mahasiswa", func() (interface{}, error) {
 
 		client := &http.Client{Timeout: 5 * time.Second}
@@ -95,6 +97,7 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 	meta := result["meta"].(map[string]interface{})
 	total := int(meta["total"].(float64))
 
+	// 🔥 ambil cache mahasiswa SEKALI
 	mahasiswaMap := getMahasiswaCache()
 
 	layout := "2006-01-02"
@@ -105,12 +108,6 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 
 		memberID := strings.TrimSpace(fmt.Sprintf("%v", loan["member_id"]))
 		mahasiswa := mahasiswaMap[memberID]
-
-		if mahasiswa == nil {
-			fmt.Println("TIDAK MATCH:", memberID)
-		} else {
-			fmt.Println("MATCH:", memberID, mahasiswa["nama_user"])
-		}
 
 		// keterlambatan
 		keterlambatan := "-"
@@ -159,16 +156,16 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 	return formatted, total, nil
 }
 
-func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
-	if loanID == "" {
-		return nil, fmt.Errorf("missing loan_id parameter")
+func FetchLoanDetail(memberID string) (map[string]interface{}, error) {
+	if memberID == "" {
+		return nil, fmt.Errorf("missing member_id parameter")
 	}
 
-	// Data loan
-	opacLoanURL := fmt.Sprintf("http://localhost:8080/loan/%s", loanID)
+	// Ambil semua loan milik member_id
+	opacLoanURL := fmt.Sprintf("http://localhost:8080/loan?member_id=%s", url.QueryEscape(memberID))
 	respLoan, err := http.Get(opacLoanURL)
 	if err != nil {
-		return nil, fmt.Errorf("Gagal ambil detail loan dari OPAC")
+		return nil, fmt.Errorf("Gagal ambil data loan dari OPAC")
 	}
 	defer respLoan.Body.Close()
 
@@ -179,150 +176,201 @@ func FetchLoanDetail(loanID string) (map[string]interface{}, error) {
 
 	var loanResult map[string]interface{}
 	if err := json.Unmarshal(loanBytes, &loanResult); err != nil {
-		return nil, fmt.Errorf("Gagal decode detail loan: %v", err)
+		return nil, fmt.Errorf("Gagal decode data loan: %v", err)
 	}
 
-	// Data mahasiswa
+	loansData, ok := loanResult["data"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("Data loan tidak ditemukan atau format salah")
+	}
+	if len(loansData) == 0 {
+		return nil, fmt.Errorf("Tidak ada data loan untuk member_id ini")
+	}
+
+	// Data mahasiswa (ambil dari loan pertama saja, asumsikan sama)
 	var mahasiswaData map[string]interface{}
-	var memberID string
-	switch v := loanResult["member_id"].(type) {
-	case string:
-		memberID = v
-	case float64:
-		memberID = fmt.Sprintf("%.0f", v)
-	case int:
-		memberID = fmt.Sprintf("%d", v)
-	default:
-		memberID = ""
-	}
-	if memberID != "" {
-		sikompenURL := fmt.Sprintf("http://localhost:8000/api/mahasiswa?nim=%s", memberID)
-		respMhs, err := http.Get(sikompenURL)
-		if err == nil {
-			defer respMhs.Body.Close()
-			mhsBytes, _ := io.ReadAll(respMhs.Body)
-			var mhsArr []map[string]interface{}
-			if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
-				// Try to find exact kode_user match, similar to above
-				for _, m := range mhsArr {
-					var kodeUser string
-					switch kv := m["kode_user"].(type) {
-					case string:
-						kodeUser = kv
-					case float64:
-						kodeUser = fmt.Sprintf("%.0f", kv)
-					}
-					if kodeUser == memberID {
-						mahasiswaData = m
-						break
-					}
+	sikompenURL := fmt.Sprintf("http://localhost:8000/api/mahasiswa?nim=%s", memberID)
+	respMhs, err := http.Get(sikompenURL)
+	if err == nil {
+		defer respMhs.Body.Close()
+		mhsBytes, _ := io.ReadAll(respMhs.Body)
+		var mhsArr []map[string]interface{}
+		if err := json.Unmarshal(mhsBytes, &mhsArr); err == nil && len(mhsArr) > 0 {
+			for _, m := range mhsArr {
+				var kodeUser string
+				switch kv := m["kode_user"].(type) {
+				case string:
+					kodeUser = kv
+				case float64:
+					kodeUser = fmt.Sprintf("%.0f", kv)
 				}
-				if mahasiswaData == nil {
-					mahasiswaData = mhsArr[0]
+				if kodeUser == memberID {
+					mahasiswaData = m
+					break
 				}
 			}
 		}
 	}
 
-	// Data item
-	var itemData map[string]interface{}
-	itemCode, _ := loanResult["item_code"].(string)
-	if itemCode != "" {
-		opacItemURL := fmt.Sprintf("http://localhost:8080/item/%s", itemCode)
-		respItem, err := http.Get(opacItemURL)
-		if err == nil {
-			defer respItem.Body.Close()
-			itemBytes, _ := io.ReadAll(respItem.Body)
-			_ = json.Unmarshal(itemBytes, &itemData)
-			if data, ok := itemData["data"].(map[string]interface{}); ok {
-				itemData = data
-			}
-		}
+	// Filter mahasiswaData ada (aktif)
+	if mahasiswaData == nil {
+		return map[string]interface{}{
+			"message": "Data mahasiswa tidak ditemukan atau tidak aktif",
+		}, nil
 	}
 
-	var biblioData map[string]interface{}
-	if itemData != nil {
-		var biblioID string
-		switch v := itemData["biblio_id"].(type) {
-		case string:
-			biblioID = v
-		case float64:
-			biblioID = fmt.Sprintf("%.0f", v)
+	layout := "2006-01-02"
+	peminjamanArr := make([]map[string]interface{}, 0)
+	bukuArr := make([]map[string]interface{}, 0)
+	for _, item := range loansData {
+		loan := item.(map[string]interface{})
+		// Ambil is_return dari loan
+		var isReturn interface{}
+		if v, ok := loan["is_return"]; ok {
+			isReturn = v
 		}
-		if biblioID != "" {
-			opacBiblioURL := fmt.Sprintf("http://localhost:8080/biblio/%s", biblioID)
-			respBiblio, err := http.Get(opacBiblioURL)
+		// Ambil detail loan 
+		var detailLoan map[string]interface{}
+		if loanID, ok := loan["loan_id"]; ok {
+			detailLoanURL := fmt.Sprintf("http://localhost:8080/loan/%v", loanID)
+			respDetail, err := http.Get(detailLoanURL)
 			if err == nil {
-				defer respBiblio.Body.Close()
-				biblioBytes, _ := io.ReadAll(respBiblio.Body)
-				_ = json.Unmarshal(biblioBytes, &biblioData)
-				if data, ok := biblioData["data"].(map[string]interface{}); ok {
-					biblioData = data
+				defer respDetail.Body.Close()
+				detailBytes, _ := io.ReadAll(respDetail.Body)
+				_ = json.Unmarshal(detailBytes, &detailLoan)
+				if isReturn == nil {
+					if v, ok := detailLoan["is_return"]; ok {
+						isReturn = v
+					}
+				}
+			}
+		}
+		status := "Belum"
+		switch v := isReturn.(type) {
+		case bool:
+			if v {
+				status = "Lunas"
+			}
+		case float64:
+			if v == 1 {
+				status = "Lunas"
+			}
+		case int:
+			if v == 1 {
+				status = "Lunas"
+			}
+		case int64:
+			if v == 1 {
+				status = "Lunas"
+			}
+		case string:
+			s := strings.TrimSpace(strings.ToLower(v))
+			if s == "1" || s == "true" {
+				status = "Lunas"
+			}
+		default:
+			if fmt.Sprintf("%v", v) == "1" {
+				status = "Lunas"
+			}
+		}
+		keterlambatan := "-"
+		dueDate, _ := loan["due_date"].(string)
+		returnDate, _ := loan["return_date"].(string)
+		if dueDate != "" {
+			tDue, errDue := time.Parse(layout, dueDate)
+			var tEnd time.Time
+			var errEnd error
+			if returnDate == "" || returnDate == "null" {
+				tEnd = time.Now()
+			} else {
+				tEnd, errEnd = time.Parse(layout, returnDate)
+				if errEnd != nil {
+					tEnd = time.Now()
+				}
+			}
+			if errDue == nil {
+				daysLate := int(tEnd.Sub(tDue).Hours() / 24)
+				if daysLate > 0 {
+					keterlambatan = fmt.Sprintf("%d Hari", daysLate)
+				} else {
+					keterlambatan = "Tepat Waktu"
+				}
+			}
+		}
+		peminjamanArr = append(peminjamanArr, map[string]interface{}{
+			"loan_id":       loan["loan_id"],
+			"peminjaman":    loan["loan_date"],
+			"tenggat_waktu": loan["due_date"],
+			"pengembalian":  loan["return_date"],
+			"status":        status,
+			"keterlambatan": keterlambatan,
+		})
+
+		// Ambil detail buku dengan fetch detail loan per loan_id
+		if loanID, ok := loan["loan_id"]; ok {
+			detailLoanURL := fmt.Sprintf("http://localhost:8080/loan/%v", loanID)
+			respDetail, err := http.Get(detailLoanURL)
+			if err == nil {
+				defer respDetail.Body.Close()
+				detailBytes, _ := io.ReadAll(respDetail.Body)
+				var detailLoan map[string]interface{}
+				if err := json.Unmarshal(detailBytes, &detailLoan); err == nil {
+					itemCode, _ := detailLoan["item_code"].(string)
+					if itemCode != "" {
+						opacItemURL := fmt.Sprintf("http://localhost:8080/item/%s", itemCode)
+						respItem, err := http.Get(opacItemURL)
+						if err == nil {
+							defer respItem.Body.Close()
+							itemBytes, _ := io.ReadAll(respItem.Body)
+							var itemData map[string]interface{}
+							if err := json.Unmarshal(itemBytes, &itemData); err == nil {
+								var biblioID string
+								switch v := itemData["biblio_id"].(type) {
+								case string:
+									biblioID = v
+								case float64:
+									biblioID = fmt.Sprintf("%.0f", v)
+								}
+								if biblioID != "" {
+									opacBiblioURL := fmt.Sprintf("http://localhost:8080/biblio/%s", biblioID)
+									respBiblio, err := http.Get(opacBiblioURL)
+									if err == nil {
+										defer respBiblio.Body.Close()
+										biblioBytes, _ := io.ReadAll(respBiblio.Body)
+										var biblioData map[string]interface{}
+										if err := json.Unmarshal(biblioBytes, &biblioData); err == nil {
+											buku := map[string]interface{}{
+												"loan_id":      loan["loan_id"],
+												"title":        biblioData["title"],
+												"edition":      biblioData["edition"],
+												"isbn_issn":    biblioData["isbn_issn"],
+												"publish_year": biblioData["publish_year"],
+												"collation":    biblioData["collation"],
+												"call_number":  biblioData["call_number"],
+											}
+											if buku["title"] != nil && buku["title"] != "" {
+												bukuArr = append(bukuArr, buku)
+											}
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 	}
 
 	detail := make(map[string]interface{})
-	if mahasiswaData != nil {
-		detail["mahasiswa"] = map[string]interface{}{
-			"nama":     mahasiswaData["nama_user"],
-			"nim":      mahasiswaData["kode_user"],
-			"prodi":    mahasiswaData["prodi"],
-			"kelas":    mahasiswaData["kelas"],
-			"semester": mahasiswaData["semester"],
-		}
+	detail["mahasiswa"] = map[string]interface{}{
+		"nama":     mahasiswaData["nama_user"],
+		"nim":      mahasiswaData["kode_user"],
+		"prodi":    mahasiswaData["prodi"],
+		"kelas":    mahasiswaData["kelas"],
+		"semester": mahasiswaData["semester"],
 	}
-	if loanResult != nil {
-		status := "Belum"
-		if val, ok := loanResult["is_return"].(bool); ok && val {
-			status = "Lunas"
-		} else if val, ok := loanResult["is_return"].(float64); ok && val == 1 {
-			status = "Lunas"
-		}
-		keterlambatan := "-"
-		dueDate, _ := loanResult["due_date"].(string)
-		returnDate, _ := loanResult["return_date"].(string)
-		layout := "2006-01-02"
-		var daysLate int
-		if dueDate != "" {
-			if returnDate == "" {
-				now := fmt.Sprintf("%04d-%02d-%02d", time.Now().Year(), time.Now().Month(), time.Now().Day())
-				tDue, err1 := time.Parse(layout, dueDate)
-				tNow, err2 := time.Parse(layout, now)
-				if err1 == nil && err2 == nil {
-					daysLate = int(tNow.Sub(tDue).Hours() / 24)
-				}
-			} else {
-				tDue, err1 := time.Parse(layout, dueDate)
-				tReturn, err2 := time.Parse(layout, returnDate)
-				if err1 == nil && err2 == nil {
-					daysLate = int(tReturn.Sub(tDue).Hours() / 24)
-				}
-			}
-			if daysLate > 0 {
-				keterlambatan = fmt.Sprintf("%d Hari", daysLate)
-			} else {
-				keterlambatan = "Tepat Waktu"
-			}
-		}
-		detail["peminjaman"] = map[string]interface{}{
-			"peminjaman":    loanResult["loan_date"],
-			"tenggat_waktu": loanResult["due_date"],
-			"pengembalian":  loanResult["return_date"],
-			"status":        status,
-			"keterlambatan": keterlambatan,
-		}
-	}
-	if biblioData != nil {
-		detail["buku"] = map[string]interface{}{
-			"title":        biblioData["title"],
-			"edition":      biblioData["edition"],
-			"isbn_issn":    biblioData["isbn_issn"],
-			"publish_year": biblioData["publish_year"],
-			"collation":    biblioData["collation"],
-			"call_number":  biblioData["call_number"],
-		}
-	}
+	detail["peminjaman"] = peminjamanArr
+	detail["buku"] = bukuArr
 	return detail, nil
 }
