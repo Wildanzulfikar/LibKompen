@@ -27,8 +27,8 @@ func GetAllLoan(c *fiber.Ctx) error {
 }
 
 func GetLoanDetail(c *fiber.Ctx) error {
-	loanID := c.Params("loan_id")
-	result, err := services.FetchLoanDetail(loanID)
+	memberID := c.Params("loan_id") // param tetap loan_id di route, tapi isinya member_id
+	result, err := services.FetchLoanDetail(memberID)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
