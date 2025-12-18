@@ -8,6 +8,11 @@ import (
 )
 
 func SetupRoutes(app *fiber.App) {
+	app.Get("/api/sikompen-status-bebas/:kode_user", controllers.GetSikompenStatusBebas)
+	app.Get("/api/sikompen-status-bebas-range/:kode_user", controllers.GetSikompenStatusBebasRange)
+	app.Get("/api/peminjam-per-jurusan", controllers.GetPeminjamPerJurusan)
+	app.Get("/api/dashboard-stats", controllers.GetDashboardStats)
+	app.Get("/api/bebas-pustaka-jurusan", controllers.GetBebasPustakaJurusan)
 
 	users := app.Group("/users")
 
@@ -50,5 +55,8 @@ func SetupRoutes(app *fiber.App) {
 	app.Post("/api/biblio", controllers.CreateBiblio)
 	// app.Get("/api/approvals", controllers.GetApprovals)
 	// app.Post("/api/approvals", controllers.CreateApproval)
+
+	app.Post("/api/visitor-summary", controllers.CreateVisitorSummary)
+	app.Get("/api/visitor-summary/check", controllers.CheckVisitorSummary)
 
 }
