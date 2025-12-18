@@ -8,8 +8,13 @@ import (
 )
 
 func SetupRoutes(app *fiber.App) {
+	app.Get("/api/visitor-summary/recap", controllers.RecapVisitorSummary)
+	app.Get("/api/visitor-summary/recap-per-jurusan", controllers.RecapVisitorSummaryPerJurusan)
+	app.Get("/api/visitor-summary/recap-per-bulan", controllers.RecapVisitorSummaryPerBulan)
+	
 	app.Get("/api/sikompen-status-bebas/:kode_user", controllers.GetSikompenStatusBebas)
 	app.Get("/api/sikompen-status-bebas-range/:kode_user", controllers.GetSikompenStatusBebasRange)
+
 	app.Get("/api/peminjam-per-jurusan", controllers.GetPeminjamPerJurusan)
 	app.Get("/api/dashboard-stats", controllers.GetDashboardStats)
 	app.Get("/api/bebas-pustaka-jurusan", controllers.GetBebasPustakaJurusan)
@@ -56,6 +61,7 @@ func SetupRoutes(app *fiber.App) {
 	// app.Get("/api/approvals", controllers.GetApprovals)
 	// app.Post("/api/approvals", controllers.CreateApproval)
 
+	app.Get("/api/visitor-summary", controllers.GetAllVisitorSummary)
 	app.Post("/api/visitor-summary", controllers.CreateVisitorSummary)
 	app.Get("/api/visitor-summary/check", controllers.CheckVisitorSummary)
 
