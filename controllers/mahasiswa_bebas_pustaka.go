@@ -28,7 +28,6 @@ func GetMahasiswaBebasPustaka(c *fiber.Ctx) error {
 	return c.JSON(hasil)
 }
 
-// Endpoint khusus Sikompen: cek status bebas pustaka (Lunas/Belum) berdasarkan loan Opac
 func GetSikompenStatusBebas(c *fiber.Ctx) error {
 	kodeUser := c.Params("kode_user")
 	if kodeUser == "" {

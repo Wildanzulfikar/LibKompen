@@ -50,7 +50,6 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		loansData = []interface{}{}
 	}
 
-	// Filter loans: hanya yang member_id ada di master mahasiswa
 	filteredLoans := make([]map[string]interface{}, 0)
 	for _, l := range loansData {
 		loanMap, ok := l.(map[string]interface{})
@@ -71,15 +70,10 @@ func GetDashboardStats(c *fiber.Ctx) error {
 			filteredLoans = append(filteredLoans, loanMap)
 		}
 	}
-	fmt.Println("filteredLoans count:", len(filteredLoans))
-	if len(filteredLoans) > 0 {
-		fmt.Println("filteredLoans sample:", filteredLoans[0])
-	}
 
-	// total_mahasiswa: dari master
+	// total_mahasiswa
 	totalMahasiswa := len(masterMhs)
 
-	// Sederhana: count is_return==1 dan is_return==0 dari filteredLoans
 	totalBebasPustaka := 0
 	totalTunggakan := 0
 	peminjamSet := make(map[string]struct{})
@@ -133,10 +127,6 @@ func GetDashboardStats(c *fiber.Ctx) error {
 			totalTunggakan++
 		}
 	}
-	fmt.Println("totalMahasiswa:", totalMahasiswa)
-	fmt.Println("totalBebasPustaka:", totalBebasPustaka)
-	fmt.Println("totalTunggakan:", totalTunggakan)
-	fmt.Println("totalPeminjam:", len(peminjamSet))
 
 	return c.JSON(fiber.Map{
 		"total_mahasiswa":     totalMahasiswa,
@@ -157,7 +147,7 @@ var kodeJurusanMap = map[string]string{
 	"01": "Teknik Sipil",
 }
 
-// Endpoint: /dashboard/bebas-pustaka-jurusan
+// bebas-pustaka-jurusan
 func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 	client := &http.Client{Timeout: 8 * time.Second}
 	mahasiswaURL := "http://localhost:8000/api/mahasiswa?limit=0"
@@ -172,7 +162,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode mahasiswa"})
 	}
 
-	// Build master mahasiswa map (kode_user)
+	// Build master mahasiswa map 
 	masterMhs := make(map[string]map[string]interface{})
 	for _, m := range mahasiswaList {
 		if kode, ok := m["kode_user"].(string); ok && kode != "" {
@@ -180,7 +170,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		}
 	}
 
-	// Fetch all loans
+	// Fetch semua loan
 	loansURL := "http://localhost:8080/loan?page=1&per_page=100000"
 	respLoan, err := client.Get(loansURL)
 	if err != nil {
@@ -197,7 +187,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		loansData = []interface{}{}
 	}
 
-	// Filter loans: hanya yang member_id ada di master mahasiswa dan is_return==1
+	// mahasiswa aktif
 	jurusanCount := make(map[string]int)
 	for _, l := range loansData {
 		loanMap, ok := l.(map[string]interface{})
@@ -218,7 +208,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		if !ok {
 			continue
 		}
-		// Cek is_return==1
+
 		isReturn := -1
 		switch v := loanMap["is_return"].(type) {
 		case int:
@@ -253,7 +243,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		if isReturn != 1 {
 			continue
 		}
-		// Ambil kode jurusan dari kode_user (2 digit ke-3 dan ke-4)
+
 		kodeUser, _ := mhs["kode_user"].(string)
 		if len(kodeUser) < 4 {
 			continue
@@ -262,7 +252,6 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		jurusanCount[kodeJurusan]++
 	}
 
-	// Build hasil
 	result := make([]fiber.Map, 0)
 	for kode, nama := range kodeJurusanMap {
 		result = append(result, fiber.Map{
@@ -275,7 +264,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// Endpoint: /api/peminjam-per-jurusan
+// /api/peminjam-per-jurusan
 func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 	client := &http.Client{Timeout: 8 * time.Second}
 	mahasiswaURL := "http://localhost:8000/api/mahasiswa?limit=0"
@@ -290,7 +279,7 @@ func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode mahasiswa"})
 	}
 
-	// Build master mahasiswa map (kode_user)
+	// Build master mahasiswa map 
 	masterMhs := make(map[string]map[string]interface{})
 	for _, m := range mahasiswaList {
 		if kode, ok := m["kode_user"].(string); ok && kode != "" {
@@ -298,7 +287,7 @@ func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 		}
 	}
 
-	// Fetch all loans
+	// Fetch semua loan
 	loansURL := "http://localhost:8080/loan?page=1&per_page=100000"
 	respLoan, err := client.Get(loansURL)
 	if err != nil {
@@ -315,7 +304,6 @@ func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 		loansData = []interface{}{}
 	}
 
-	// Set member_id unik per jurusan
 	jurusanPeminjam := make(map[string]map[string]struct{})
 	for _, l := range loansData {
 		loanMap, ok := l.(map[string]interface{})

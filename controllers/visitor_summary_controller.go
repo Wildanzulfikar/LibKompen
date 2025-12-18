@@ -7,8 +7,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// POST /api/visitor-summary
-
 func CreateVisitorSummary(c *fiber.Ctx) error {
 	db := database.DB
 
@@ -28,7 +26,7 @@ func CreateVisitorSummary(c *fiber.Ctx) error {
 	return c.JSON(vs)
 }
 
-// GET /api/visitor-summary/check?kode_user=...&date=...
+// /api/visitor-summary/check?kode_user=...&date=...
 func CheckVisitorSummary(c *fiber.Ctx) error {
 	db := database.DB
 	kodeUser := c.Query("kode_user")
@@ -37,7 +35,6 @@ func CheckVisitorSummary(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "kode_user and date required"})
 	}
 	var count int64
-	// Asumsikan ada kolom created_at di visitor_summary (jika belum ada, perlu migrasi DB)
 	err := db.Model(&models.VisitorSummary{}).
 		Where("kode_user = ? AND DATE(created_at) = ?", kodeUser, date).
 		Count(&count).Error

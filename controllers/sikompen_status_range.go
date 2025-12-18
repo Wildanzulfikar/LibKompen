@@ -9,8 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// Endpoint: /api/sikompen-status-bebas-range/:kode_user
-// Query params: start_date, end_date (YYYY-MM-DD)
+// /api/bebas-pustaka-range/:kode_user
 func GetSikompenStatusBebasRange(c *fiber.Ctx) error {
 	kodeUser := c.Params("kode_user")
 	startDate := c.Query("start_date")
