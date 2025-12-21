@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"LibKompen/utils"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -162,7 +163,7 @@ func GetBebasPustakaJurusan(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode mahasiswa"})
 	}
 
-	// Build master mahasiswa map 
+	// Build master mahasiswa map
 	masterMhs := make(map[string]map[string]interface{})
 	for _, m := range mahasiswaList {
 		if kode, ok := m["kode_user"].(string); ok && kode != "" {
@@ -279,7 +280,7 @@ func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode mahasiswa"})
 	}
 
-	// Build master mahasiswa map 
+	// Build master mahasiswa map
 	masterMhs := make(map[string]map[string]interface{})
 	for _, m := range mahasiswaList {
 		if kode, ok := m["kode_user"].(string); ok && kode != "" {
@@ -346,6 +347,146 @@ func GetPeminjamPerJurusan(c *fiber.Ctx) error {
 			"kode":    kode,
 			"jurusan": nama,
 			"total":   total,
+		})
+	}
+
+	return c.JSON(result)
+}
+
+func GetAnalyticsPerProdi(c *fiber.Ctx) error {
+	client := &http.Client{Timeout: 8 * time.Second}
+	mahasiswaURL := "http://localhost:8000/api/mahasiswa?limit=0"
+	resp, err := client.Get(mahasiswaURL)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal ambil data mahasiswa Sikompen"})
+	}
+	defer resp.Body.Close()
+
+	var mahasiswaList []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&mahasiswaList); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode mahasiswa"})
+	}
+
+	// Build master mahasiswa
+	masterMhs := make(map[string]map[string]interface{})
+	for _, m := range mahasiswaList {
+		if kode, ok := m["kode_user"].(string); ok && kode != "" {
+			masterMhs[kode] = m
+		}
+	}
+
+	// Fetch all loans
+	loansURL := "http://localhost:8080/loan?page=1&per_page=100000"
+	respLoan, err := client.Get(loansURL)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal ambil data loan"})
+	}
+	defer respLoan.Body.Close()
+	var loanPayload map[string]interface{}
+	bodyBytes, _ := io.ReadAll(respLoan.Body)
+	if err := json.Unmarshal(bodyBytes, &loanPayload); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal decode data loan"})
+	}
+	loansData, ok := loanPayload["data"].([]interface{})
+	if !ok {
+		loansData = []interface{}{}
+	}
+
+	// --- Build set mahasiswa per prodi ---
+	prodiMahasiswa := make(map[string]map[string]struct{})
+	for _, m := range mahasiswaList {
+		nim, _ := m["kode_user"].(string)
+		prodi := utils.GetProdiFromNIM(nim)
+		if prodi == "Unknown" {
+			continue
+		}
+		if prodiMahasiswa[prodi] == nil {
+			prodiMahasiswa[prodi] = make(map[string]struct{})
+		}
+		prodiMahasiswa[prodi][nim] = struct{}{}
+	}
+
+	// --- Build loan map per mahasiswa ---
+	mhsLoanStatus := make(map[string]int) // nim -> is_return (0/1)
+	for _, l := range loansData {
+		loanMap, ok := l.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		memberID := ""
+		switch v := loanMap["member_id"].(type) {
+		case string:
+			memberID = v
+		case float64:
+			memberID = fmt.Sprintf("%.0f", v)
+		}
+		if memberID == "" {
+			continue
+		}
+		mhs, ok := masterMhs[memberID]
+		if !ok {
+			continue
+		}
+		nim, _ := mhs["kode_user"].(string)
+		isReturn := -1
+		switch v := loanMap["is_return"].(type) {
+		case int:
+			isReturn = v
+		case int8:
+			isReturn = int(v)
+		case int16:
+			isReturn = int(v)
+		case int32:
+			isReturn = int(v)
+		case int64:
+			isReturn = int(v)
+		case float64:
+			isReturn = int(v)
+		case float32:
+			isReturn = int(v)
+		case string:
+			if v == "1" {
+				isReturn = 1
+			} else if v == "0" {
+				isReturn = 0
+			}
+		case bool:
+			if v {
+				isReturn = 1
+			} else {
+				isReturn = 0
+			}
+		}
+		// Hanya simpan status terakhir (override)
+		mhsLoanStatus[nim] = isReturn
+	}
+
+	type ProdiStat struct {
+		Prodi        string `json:"prodi"`
+		Mahasiswa    int    `json:"mahasiswa"`
+		BebasPustaka int    `json:"bebasPustaka"`
+		Tunggakan    int    `json:"tunggakan"`
+	}
+	result := make([]ProdiStat, 0)
+	for prodi, mhsSet := range prodiMahasiswa {
+		bebas := 0
+		tunggakan := 0
+		for nim := range mhsSet {
+			status, adaLoan := mhsLoanStatus[nim]
+			if !adaLoan {
+				// Tidak ada loan, otomatis bebas pustaka
+				bebas++
+			} else if status == 1 {
+				bebas++
+			} else if status == 0 {
+				tunggakan++
+			}
+		}
+		result = append(result, ProdiStat{
+			Prodi:        prodi,
+			Mahasiswa:    len(mhsSet),
+			BebasPustaka: bebas,
+			Tunggakan:    tunggakan,
 		})
 	}
 

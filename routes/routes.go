@@ -16,6 +16,7 @@ func SetupRoutes(app *fiber.App) {
 	app.Get("/api/sikompen-status-bebas-range/:kode_user", controllers.GetSikompenStatusBebasRange)
 
 	app.Get("/api/peminjam-per-jurusan", controllers.GetPeminjamPerJurusan)
+	app.Get("/api/analytics/prodi", controllers.GetAnalyticsPerProdi)
 	app.Get("/api/dashboard-stats", controllers.GetDashboardStats)
 	app.Get("/api/bebas-pustaka-jurusan", controllers.GetBebasPustakaJurusan)
 
