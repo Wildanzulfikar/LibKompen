@@ -135,7 +135,7 @@ func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interfac
 		mu      sync.Mutex
 		wg      sync.WaitGroup
 		jobs    = make(chan map[string]interface{}, len(mahasiswaList))
-		workers = 10 
+		workers = 10
 	)
 
 	// Worker function
@@ -213,14 +213,14 @@ func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interfac
 	return hasil, nil
 }
 
-var loanCache = struct {
-	sync.RWMutex
-	data map[string]map[string]interface{}
-	time map[string]time.Time
-}{
-	data: make(map[string]map[string]interface{}),
-	time: make(map[string]time.Time),
-}
+// var loanCache = struct {
+// 	sync.RWMutex
+// 	data map[string]map[string]interface{}
+// 	time map[string]time.Time
+// }{
+// 	data: make(map[string]map[string]interface{}),
+// 	time: make(map[string]time.Time),
+// }
 
 // // Fungsi utama
 // func GetMahasiswaBebasPustakaServiceFast(memberID string) ([]map[string]interface{}, error) {

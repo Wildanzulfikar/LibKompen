@@ -386,7 +386,7 @@ func FetchLoanByMemberID(memberID string) (map[string]interface{}, error) {
 			"kelas":    mhs["kelas"],
 			"semester": mhs["semester"],
 		}
-	}
+	}	
 
 	return result, nil
 }
