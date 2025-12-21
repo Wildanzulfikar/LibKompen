@@ -109,13 +109,12 @@ func fetchAllLoans() ([]map[string]interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
 		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return nil, err
-		}
+		_ = json.Unmarshal(body, &result)
 
 		loansData, ok := result["data"].([]interface{})
 		if !ok || len(loansData) == 0 {
@@ -126,11 +125,10 @@ func fetchAllLoans() ([]map[string]interface{}, error) {
 			allLoans = append(allLoans, item.(map[string]interface{}))
 		}
 
-		meta := result["meta"].(map[string]interface{})
-		total := int(meta["total"].(float64))
-		if currentPage*1000 >= total {
+		if len(loansData) < 1000 {
 			break
 		}
+
 		currentPage++
 	}
 
@@ -194,6 +192,9 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 
 	group := make(map[string]*Agg)
 
+	// =======================
+	// GROUPING LOAN
+	// =======================
 	for _, loan := range allLoans {
 		memberID := strings.TrimSpace(fmt.Sprintf("%v", loan["member_id"]))
 		if memberID == "" {
@@ -215,6 +216,9 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 		group[memberID].Total++
 	}
 
+	// =======================
+	// BUILD RESULT
+	// =======================
 	result := make([]map[string]interface{}, 0)
 
 	for nim, g := range group {
@@ -240,12 +244,41 @@ func GetAllLoanFormatted(page, perPage int, search string) ([]map[string]interfa
 		})
 	}
 
+	// =======================
+	// 🔥 SEARCH FILTER
+	// =======================
+	if search != "" {
+		s := strings.ToLower(search)
+		filtered := make([]map[string]interface{}, 0)
+
+		for _, item := range result {
+			nim := strings.ToLower(fmt.Sprintf("%v", item["nim"]))
+			nama := strings.ToLower(fmt.Sprintf("%v", item["nama"]))
+			prodi := strings.ToLower(fmt.Sprintf("%v", item["prodi"]))
+			kelas := strings.ToLower(fmt.Sprintf("%v", item["kelas"]))
+
+			if strings.Contains(nim, s) ||
+				strings.Contains(nama, s) ||
+				strings.Contains(prodi, s) ||
+				strings.Contains(kelas, s) {
+				filtered = append(filtered, item)
+			}
+		}
+
+		result = filtered
+	}
+
+	// =======================
+	// PAGINATION
+	// =======================
 	total := len(result)
+
 	start := (page - 1) * perPage
-	end := start + perPage
 	if start > total {
 		start = total
 	}
+
+	end := start + perPage
 	if end > total {
 		end = total
 	}
@@ -386,7 +419,7 @@ func FetchLoanByMemberID(memberID string) (map[string]interface{}, error) {
 			"kelas":    mhs["kelas"],
 			"semester": mhs["semester"],
 		}
-	}	
+	}
 
 	return result, nil
 }
